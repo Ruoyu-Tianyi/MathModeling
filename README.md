@@ -1,6 +1,6 @@
-# math-modeling-contest
+# MatgModeling Skill
 
-数学建模竞赛全流程 AI 技能（Skill）：**输入赛题 → 输出可直接提交的建模论文**（含模型推导、可运行代码、规范图表、摘要与参考文献）。适用于国赛（CUMCM）、美赛（MCM/ICM）及同类赛事，面向 Kimi Work / Kimi Code 等支持 SKILL.md 规范的 AI Agent 运行时。
+**把赛题交给Agent → 输出可直接提交的建模论文**（含模型推导、可运行代码、规范图表、摘要与参考文献）。适用于国赛（CUMCM）、美赛（MCM/ICM）及同类赛事，面向 所有支持 SKILL.md 规范的 AI Agent 运行。
 
 ## 功能特性
 
