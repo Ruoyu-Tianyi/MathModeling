@@ -27,12 +27,9 @@
 
 ## 安装
 
-将整个文件夹复制到技能目录（任选其一）：
+1、将整个文件夹复制到技能目录，或者直接下载 Release 中的 `math-modeling-contest.skill`（zip 格式）解压到上述目录。
 
-- Kimi Work：`C:\Users\<用户名>\AppData\Roaming\kimi-desktop\daimon-share\daimon\skills\math-modeling-contest\`
-- 通用：`~/.config/agents/skills/math-modeling-contest/` 或 `~/.kimi/skills/math-modeling-contest/`
-
-或者直接下载 Release 中的 `math-modeling-contest.skill`（zip 格式）解压到上述目录。
+2、或者直接交给你的Agent安装
 
 ## 使用
 
