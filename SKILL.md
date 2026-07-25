@@ -45,12 +45,13 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - 公式用 LaTeX；符号表统一符号，全文一致；图表有编号有题注，正文必引用（"如图 1 所示"）。
 - 语言：国赛中文（术语保留英文），美赛英文。
 
-### P4 校验交付（Gate：precheck 通过 + 成稿 PDF）
+### P4 校验交付（Gate：precheck 通过 + 成稿 docx）
 
 1. 运行 `python scripts/precheck.py paper/paper.md --lang zh`，修复报告的所有 ERROR，WARN 逐条确认。
 2. 人工复核清单：摘要含具体结果数字；每问都有检验与灵敏度；假设合理且被引用；参考文献格式统一；无 TODO/占位符残留。
-3. 转 PDF：调用 `md-to-pdf` skill（或用户要求 docx 时用 `docx` skill），输出 `paper/paper.pdf`。
-4. 交付清单：`paper.pdf`（主交付）、`code/`（支撑材料）、`data/SOURCES.md`（数据溯源）、`figures/`。
+3. 排版按 `references/format-spec.md`（国赛字体字号、三线表、题注、摘要页规范）。**默认交付 Word**：运行 `python scripts/build_docx.py paper/paper.md` 生成 `paper/paper.docx`——全自动、离线，公式经 mathtext 渲染嵌入，图表按规范排版，使用者可直接在 Word 中微调。
+4. 仅当赛事要求 PDF 时：用 markdown-it + 本地 MathJax 生成 HTML，再经系统 Chrome/Edge 无头模式 `--print-to-pdf` 出片（**禁止依赖 CDN**，MathJax 必须本地化——jsdelivr 等公共 CDN 可能超时）。
+5. 交付清单：`paper.docx`（主交付，可编辑）、`paper.pdf`（按需）、`code/`（支撑材料）、`data/SOURCES.md`（数据溯源）、`figures/`。
 
 ## 效率规则
 
@@ -71,7 +72,9 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 
 - `references/problem-types.md` — 题型识别与模型选择路由表（评价/预测/优化/机理/数据分析）
 - `references/paper-structure.md` — 国赛/美赛论文结构、摘要与图表规范、评审关注点
+- `references/format-spec.md` — 国赛排版规范（字体字号、页边距、三线表、题注、摘要页）
 - `references/data-sources.md` — 数据库与公开数据源路由（Wind/Gildata/iFinD/World Bank/IMF/Yahoo/SEC 及取数口径）
 - `scripts/scaffold.py` — 初始化比赛项目目录并写入论文模板
 - `scripts/precheck.py` — 提交前自动检查（章节完整性、图表编号引用、摘要、占位符）
+- `scripts/build_docx.py` — paper.md → 国赛规范 docx（离线；公式 mathtext 渲染嵌入，图表三线表排版）
 - `assets/paper-template.md` — 论文 Markdown 模板（zh/en 双版内嵌）
