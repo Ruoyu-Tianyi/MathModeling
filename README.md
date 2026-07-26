@@ -91,6 +91,15 @@ python scripts/build_docx.py paper/paper.md
 - **规范文档**：`format-spec.md`（模板实测参数）、`paper-structure.md`（章节对齐官方模板）、长仿真进度打印指引、出片禁用公共 CDN 规则
 - 修复：标题自动编号重复、`daimon_runtime` 导入踩坑、MathJax CDN 超时、`\le`/`\tag` 兼容等实战问题
 
+## 赞助支持
+
+如果这个技能对你有帮助，欢迎请我喝杯咖啡 ☕
+这会支持我持续维护和迭代它。
+
+<p align="center">
+  <img src="docs/sponsor-qr.jpg" width="220" alt="赞赏码">
+</p>
+
 ## License
 
 MIT
