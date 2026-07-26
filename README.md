@@ -62,16 +62,9 @@ python scripts/scaffold.py --name my-contest --lang zh
 # 提交前检查（0 error 才通过）
 python scripts/precheck.py paper/paper.md --lang zh
 
-# 生成国赛规范 Word（V1）
+# 生成国赛规范 Word
 python scripts/build_docx.py paper/paper.md
 ```
-
-## V1 更新日志
-
-- 交付物由 PDF 改为 **Word（docx）优先**，便于赛后编辑微调；PDF 保留为按需选项
-- 新增 `references/format-spec.md`：国赛字体字号、页边距、三线表、题注、摘要页排版规范
-- 新增 `scripts/build_docx.py`：离线 docx 生成（matplotlib mathtext 渲染公式嵌入、三线表、图表题注居中），经 2022 年 B 题实战验证
-- 修复实战暴露的工具链问题：PDF/HTML 出片禁止使用公共 CDN（MathJax 必须本地化）
 
 ## 设计原则
 
@@ -79,12 +72,29 @@ python scripts/build_docx.py paper/paper.md
 - 优先级：摘要质量 > 模型检验/灵敏度 > 图表规范 > 模型复杂度
 - 数据铁律：不编造数据、不编造文献、不编造数据库返回值
 
-## License
+## 更新日志
 
-MIT
+> 倒序排列，最新版本在最上。
 
-## V1.1 更新日志
+### V1.2（2026-07-26）
+
+- **公式升级为 Word 原生 OMML**：LaTeX → MathML（latex2mathml）→ OMML（Office 自带 MML2OMML.XSL），全部离线；公式在 Word 中可编辑（支持 LaTeX 输入法修改），转换失败自动回退 mathtext 图片。B 题论文 78/78 全部原生转换
+- **三线表重写**（对标优秀作品）：顶线/底线 1.5 磅、栏目线 0.5 磅，单元格直接画边框（弃用 tblLook 样式引用）；首列居中、内容列左对齐，列宽按角色分配，垂直居中 + 0.2 cm 边距
+- 修复标题自动编号与手工编号重复问题（模板 Heading 样式自带编号，builder 现自动剥离手工前缀）；行内 `code` 渲染为 Consolas
+
+### V1.1（2026-07-26）
 
 - 引入官方国赛论文模板 `assets/cumcm-template.docx`（用户提供），作为排版唯一格式来源
 - `build_docx.py` 重写：直接在官方模板上生成论文，Heading 1/2/3、Normal、图表标题、三线表样式、页脚页码全部继承模板（此前为手写格式参数）
-- `format-spec.md` 更新为模板实测参数（页边距左右 2.70 cm 等）；`paper-structure.md` 章节顺序对齐官方模板（新增"模型的分析与检验""模型的评价、改进与推广"结构）
+- `format-spec.md` 更新为模板实测参数（页边距左右 2.70 cm 等）；`paper-structure.md` 章节顺序对齐官方模板
+
+### V1.0（2026-07-25）
+
+- 交付物由 PDF 改为 **Word（docx）优先**，便于赛后编辑微调；PDF 保留为按需选项
+- 新增 `references/format-spec.md`：国赛字体字号、页边距、三线表、题注、摘要页排版规范
+- 新增 `scripts/build_docx.py`：离线 docx 生成（matplotlib mathtext 渲染公式嵌入、三线表、图表题注居中），经 2022 年 B 题实战验证
+- 修复实战暴露的工具链问题：PDF/HTML 出片禁止使用公共 CDN（MathJax 必须本地化）
+
+## License
+
+MIT

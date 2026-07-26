@@ -30,6 +30,41 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
+# OMML (native Word equation) pipeline: LaTeX -> MathML (latex2mathml)
+# -> OMML (Office-bundled MML2OMML.XSL). Falls back to mathtext PNG.
+import latex2mathml.converter
+from lxml import etree
+
+MML2OMML = r"C:\Program Files\Microsoft Office\root\Office16\MML2OMML.XSL"
+_omml_tf = None
+if Path(MML2OMML).is_file():
+    _omml_tf = etree.XSLT(etree.parse(MML2OMML))
+M_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math"
+
+
+def preprocess_latex(latex):
+    tag = None
+    m = TAG_RE.search(latex)
+    if m:
+        tag = m.group(1)
+        latex = TAG_RE.sub("", latex)
+    latex = latex.replace(r"\dfrac", r"\frac").strip()
+    latex = re.sub(r"\\le(?![a-zA-Z])", r"\\leq", latex)
+    latex = re.sub(r"\\ge(?![a-zA-Z])", r"\\geq", latex)
+    return latex, tag
+
+
+def latex_to_omml(latex):
+    """Returns m:oMath lxml element, or None on failure."""
+    if _omml_tf is None:
+        return None
+    try:
+        mml = latex2mathml.converter.convert(latex)
+        omml = _omml_tf(etree.fromstring(mml.encode()))
+        return omml.getroot()
+    except Exception:
+        return None
+
 TEMPLATE = Path(__file__).resolve().parent.parent / "assets" / "cumcm-template.docx"
 
 # manual-run fonts for elements the template formats manually (title/摘要头)
@@ -58,14 +93,7 @@ TAG_RE = re.compile(r"\\tag\{([^}]*)\}")
 
 def math_png(latex, fontsize=12):
     global _math_counter
-    tag = None
-    m = TAG_RE.search(latex)
-    if m:
-        tag = m.group(1)
-        latex = TAG_RE.sub("", latex)
-    latex = latex.replace(r"\dfrac", r"\frac").strip()
-    latex = re.sub(r"\\le(?![a-zA-Z])", r"\\leq", latex)
-    latex = re.sub(r"\\ge(?![a-zA-Z])", r"\\geq", latex)
+    latex, tag = preprocess_latex(latex)
     _math_counter += 1
     path = MATH_IMG / f"m{_math_counter}.png"
     fig = plt.figure(figsize=(0.1, 0.1))
@@ -95,45 +123,111 @@ def add_runs(p, text, base_size=BODY_SIZE):
     for m in INLINE_MATH_RE.finditer(text):
         if m.start() > pos:
             _add_bold_aware(p, text[pos:m.start()])
-        img, w, h, _ = math_png(m.group(1), fontsize=int(base_size))
-        run = p.add_run()
-        height_pt = base_size * 1.15
-        run.add_picture(img, height=Pt(height_pt), width=Pt(height_pt * w / h))
+        latex, _ = preprocess_latex(m.group(1))
+        omml = latex_to_omml(latex)
+        if omml is not None:  # native Word equation
+            p._p.append(omml)
+        else:                 # fallback: mathtext PNG
+            img, w, h, _ = math_png(m.group(1), fontsize=int(base_size))
+            run = p.add_run()
+            height_pt = base_size * 1.15
+            run.add_picture(img, height=Pt(height_pt), width=Pt(height_pt * w / h))
         pos = m.end()
     if pos < len(text):
         _add_bold_aware(p, text[pos:])
 
 
+CODE_RE = re.compile(r"`([^`]+)`")
+
+
 def _add_bold_aware(p, text):
+    def emit(seg):
+        pos2 = 0
+        for cm in CODE_RE.finditer(seg):
+            if cm.start() > pos2:
+                p.add_run(seg[pos2:cm.start()])
+            r = p.add_run(cm.group(1))
+            r.font.name = "Consolas"
+            pos2 = cm.end()
+        if pos2 < len(seg):
+            p.add_run(seg[pos2:])
     pos = 0
     for m in BOLD_RE.finditer(text):
         if m.start() > pos:
-            p.add_run(text[pos:m.start()])
-        r = p.add_run(m.group(1))
+            emit(text[pos:m.start()])
+        r = p.add_run(re.sub(CODE_RE, r"\1", m.group(1)))
         r.bold = True
         pos = m.end()
     if pos < len(text):
-        p.add_run(text[pos:])
+        emit(text[pos:])
+
+
+def set_cell_border(cell, **edges):
+    """edges: edge=(on, size_eighth_pt). e.g. top=(True, 12) -> 1.5pt line."""
+    tc_pr = cell._tc.get_or_add_tcPr()
+    old = tc_pr.find(qn("w:tcBorders"))
+    if old is not None:
+        tc_pr.remove(old)
+    borders = OxmlElement("w:tcBorders")
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        el = OxmlElement(f"w:{edge}")
+        spec = edges.get(edge)
+        if spec and spec[0]:
+            el.set(qn("w:val"), "single")
+            el.set(qn("w:sz"), str(spec[1]))
+            el.set(qn("w:color"), "000000")
+        else:
+            el.set(qn("w:val"), "nil")
+        borders.append(el)
+    tc_pr.append(borders)
+
+
+def set_table_cell_margins(t, side_cm=0.2):
+    tbl_pr = t._tbl.tblPr
+    mar = OxmlElement("w:tblCellMar")
+    for side, val in (("top", 40), ("left", int(side_cm * 567)),
+                      ("bottom", 40), ("right", int(side_cm * 567))):
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:w"), str(val)); el.set(qn("w:type"), "dxa")
+        mar.append(el)
+    tbl_pr.append(mar)
 
 
 def add_table(doc, rows):
-    t = doc.add_table(rows=len(rows), cols=len(rows[0]))
-    try:
-        t.style = doc.styles["三线表"]
-    except KeyError:
-        pass
+    """3-line table per 优秀作品 spec: 1.5pt top/bottom rules, 0.5pt header
+    rule; first column narrow+centered, others left-aligned; cells
+    vertically centered with 0.2 cm side margins; borders drawn directly
+    (table-style tblLook is unreliable)."""
+    from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
+    n_rows, n_cols = len(rows), len(rows[0])
+    t = doc.add_table(rows=n_rows, cols=n_cols)
+    t.alignment = WD_TABLE_ALIGNMENT.CENTER
+    t.autofit = False
+    text_w_cm = 21.0 - 2 * 2.7          # A4 minus template L/R margins
+    first_w = 3.0 if n_cols > 1 else text_w_cm
+    other_w = (text_w_cm - first_w) / max(n_cols - 1, 1)
+    widths = [first_w] + [other_w] * (n_cols - 1)
+    set_table_cell_margins(t)
     for i, row in enumerate(rows):
         for j, cell_text in enumerate(row):
             cell = t.cell(i, j)
+            cell.width = Cm(widths[j])
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
             cell.text = ""
             p = cell.paragraphs[0]
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            for r in p.runs:
-                r.font.size = Pt(10.5)
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER if j == 0 else WD_ALIGN_PARAGRAPH.LEFT
             add_runs(p, cell_text, base_size=10.5)
             for r in p.runs:
                 if r.font.size is None:
                     r.font.size = Pt(10.5)
+                if i == 0:
+                    r.bold = True
+            set_cell_border(cell,
+                            top=(i == 0, 12),            # 顶线 1.5pt
+                            bottom=(True, 4) if i == 0 else
+                                   ((True, 12) if i == n_rows - 1 else None),
+                            # 栏目线 0.5pt / 底线 1.5pt，其余无线
+                            left=None, right=None, insideH=None, insideV=None)
     return t
 
 
@@ -177,6 +271,9 @@ def build(md_path: Path, out_path: Path, template: Path):
                 r = p.add_run("摘  要")
                 set_font(r, ABSH_FONT)
             else:
+                # template Heading styles auto-number; strip manual prefixes
+                text = re.sub(r"^[一二三四五六七八九十]+、\s*", "", text)
+                text = re.sub(r"^\d+(\.\d+)*[、.\s]\s*", "", text)
                 style = {2: "Heading 1", 3: "Heading 2", 4: "Heading 3"}[level]
                 p = doc.add_paragraph(style=style)
                 add_runs(p, text)
@@ -186,9 +283,17 @@ def build(md_path: Path, out_path: Path, template: Path):
             while not buf.endswith("$$"):
                 i += 1
                 buf += lines[i].strip()
-            img, w, h, tag = math_png(buf[:-2], fontsize=13)
+            latex, tag = preprocess_latex(buf[:-2])
+            omml = latex_to_omml(latex)
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if omml is not None:  # native display equation wrapped in oMathPara
+                opara = etree.SubElement(p._p, f"{{{M_NS}}}oMathPara")
+                opara.append(omml)
+                if tag:
+                    p.add_run("\t\t（" + tag + "）")
+                i += 1; continue
+            img, w, h, tag = math_png(buf[:-2], fontsize=13)
             run = p.add_run()
             max_w_cm, nat_w_cm = 14.0, w / 300 * 2.54
             scale = min(1.0, max_w_cm / max(nat_w_cm, 0.1))
