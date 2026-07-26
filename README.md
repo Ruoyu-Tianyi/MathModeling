@@ -74,38 +74,16 @@ python scripts/build_docx.py paper/paper.md
 
 ## 更新日志
 
-> 倒序排列，最新版本在最上。
+> 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v1.3.0）。
 
-### V1.3.0（2026-07-26）
+### V1（2026-07-25/26）
 
-- 新增 `scripts/publish.py` 一键出片：precheck → docx → Word COM 导 PDF（无 Word 优雅跳过）→ 自动清理临时文件
-- `scaffold.py` 现在生成 `code/plot_setup.py` 绘图引导模块（封装 managed runtime sys.path 与 CJK 字体），消除每个脚本手写样板代码的踩坑点
-- `precheck.py` 增强：新增 md 引用图片的存在性检查；摘要字数统计先剥离 LaTeX 标记（修复误报）
-- `assets/paper-template.md` 标题去手工编号（模板 Heading 样式自动编号，从源头消除编号重复）
-- SKILL.md 增补：长仿真进度打印指引、图片尺寸标注语法、publish 工作流
-
-### V1.2.1（2026-07-26）
-
-- 图片尺寸灵活化：`![图 1](path.png){w=10cm}` 手动标注优先；无标注按宽高比自动分档（宽扁 ≥1.8:1 → 13.5 cm、方正 ≤1.2:1 → 10 cm、其余 → 12 cm），版面更紧凑（B 题论文 10 页 → 9 页）
-
-### V1.2（2026-07-26）
-
-- **公式升级为 Word 原生 OMML**：LaTeX → MathML（latex2mathml）→ OMML（Office 自带 MML2OMML.XSL），全部离线；公式在 Word 中可编辑（支持 LaTeX 输入法修改），转换失败自动回退 mathtext 图片。B 题论文 78/78 全部原生转换
-- **三线表重写**（对标优秀作品）：顶线/底线 1.5 磅、栏目线 0.5 磅，单元格直接画边框（弃用 tblLook 样式引用）；首列居中、内容列左对齐，列宽按角色分配，垂直居中 + 0.2 cm 边距
-- 修复标题自动编号与手工编号重复问题（模板 Heading 样式自带编号，builder 现自动剥离手工前缀）；行内 `code` 渲染为 Consolas
-
-### V1.1（2026-07-26）
-
-- 引入官方国赛论文模板 `assets/cumcm-template.docx`（用户提供），作为排版唯一格式来源
-- `build_docx.py` 重写：直接在官方模板上生成论文，Heading 1/2/3、Normal、图表标题、三线表样式、页脚页码全部继承模板（此前为手写格式参数）
-- `format-spec.md` 更新为模板实测参数（页边距左右 2.70 cm 等）；`paper-structure.md` 章节顺序对齐官方模板
-
-### V1.0（2026-07-25）
-
-- 交付物由 PDF 改为 **Word（docx）优先**，便于赛后编辑微调；PDF 保留为按需选项
-- 新增 `references/format-spec.md`：国赛字体字号、页边距、三线表、题注、摘要页排版规范
-- 新增 `scripts/build_docx.py`：离线 docx 生成（matplotlib mathtext 渲染公式嵌入、三线表、图表题注居中），经 2022 年 B 题实战验证
-- 修复实战暴露的工具链问题：PDF/HTML 出片禁止使用公共 CDN（MathJax 必须本地化）
+- **交付管线**：Word（docx）优先交付；新增 `build_docx.py`（官方模板驱动）与 `publish.py` 一键出片（precheck → docx → Word 导 PDF → 清理临时文件）
+- **排版与公式**：公式为 Word 原生 OMML（LaTeX → MathML → OMML，全离线，可编辑，失败回退图片）；官方模板 `assets/cumcm-template.docx` 为唯一格式来源；图片尺寸支持 `{w=..cm}` 标注 + 宽高比自动分档
+- **表格**：三线表重写（顶/底线 1.5 磅、栏目线 0.5 磅、单元格直接画边框、首列居中内容列左对齐、垂直居中）
+- **检查与脚手架**：`precheck.py` 增加图片存在性检查、摘要字数剥离 LaTeX 统计；`scaffold.py` 生成 `plot_setup.py` 绘图引导；论文模板标题去手工编号
+- **规范文档**：`format-spec.md`（模板实测参数）、`paper-structure.md`（章节对齐官方模板）、长仿真进度打印指引、出片禁用公共 CDN 规则
+- 修复：标题自动编号重复、`daimon_runtime` 导入踩坑、MathJax CDN 超时、`\le`/`\tag` 兼容等实战问题
 
 ## License
 
