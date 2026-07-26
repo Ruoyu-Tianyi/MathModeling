@@ -76,6 +76,14 @@ python scripts/build_docx.py paper/paper.md
 
 > 倒序排列，最新版本在最上。
 
+### V1.3.0（2026-07-26）
+
+- 新增 `scripts/publish.py` 一键出片：precheck → docx → Word COM 导 PDF（无 Word 优雅跳过）→ 自动清理临时文件
+- `scaffold.py` 现在生成 `code/plot_setup.py` 绘图引导模块（封装 managed runtime sys.path 与 CJK 字体），消除每个脚本手写样板代码的踩坑点
+- `precheck.py` 增强：新增 md 引用图片的存在性检查；摘要字数统计先剥离 LaTeX 标记（修复误报）
+- `assets/paper-template.md` 标题去手工编号（模板 Heading 样式自动编号，从源头消除编号重复）
+- SKILL.md 增补：长仿真进度打印指引、图片尺寸标注语法、publish 工作流
+
 ### V1.2.1（2026-07-26）
 
 - 图片尺寸灵活化：`![图 1](path.png){w=10cm}` 手动标注优先；无标注按宽高比自动分档（宽扁 ≥1.8:1 → 13.5 cm、方正 ≤1.2:1 → 10 cm、其余 → 12 cm），版面更紧凑（B 题论文 10 页 → 9 页）

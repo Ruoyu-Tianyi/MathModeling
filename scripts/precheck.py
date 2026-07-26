@@ -23,6 +23,7 @@ FIG_CAPTION_RE = re.compile(r"图\s*(\d+)\s*[:：]")
 TAB_REF_RE = re.compile(r"表\s*(\d+)")
 TAB_CAPTION_RE = re.compile(r"表\s*(\d+)\s*[:：]")
 NUM_RE = re.compile(r"\d")
+IMG_MD_RE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
 
 
 def check(path: Path, lang: str):
@@ -39,6 +40,12 @@ def check(path: Path, lang: str):
     for m in TODO_RE.finditer(text):
         warns.append(f"TODO-like residue: '{m.group(0)}'")
 
+    # referenced image files must exist
+    for m in IMG_MD_RE.finditer(text):
+        img = (path.parent / m.group(1)).resolve()
+        if not img.is_file():
+            errors.append(f"missing image file: {m.group(1)}")
+
     # figure/table numbering: every caption should be referenced in text
     fig_caps = {m.group(1) for m in FIG_CAPTION_RE.finditer(text)}
     fig_refs = {m.group(1) for m in FIG_REF_RE.finditer(text)}
@@ -52,7 +59,8 @@ def check(path: Path, lang: str):
     # abstract sanity: length + contains digits (concrete results)
     abs_m = re.search(r"摘要\s*\n+(.*?)\n\s*\*\*关键词", text, re.S)
     if abs_m:
-        body = re.sub(r"\s+", "", abs_m.group(1))
+        body = re.sub(r"\$[^$]+\$", "M", abs_m.group(1))  # each formula ~1 char
+        body = re.sub(r"[*`#_\s]", "", body)
         if not (150 <= len(body) <= 600):
             warns.append(f"abstract length {len(body)} chars (expect 150-600)")
         if not NUM_RE.search(body):

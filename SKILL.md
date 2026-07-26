@@ -37,21 +37,24 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - 每问必须包含**模型检验**（残差/拟合优度/收敛性/对比基线）和**灵敏度或稳健性分析**（至少一个关键参数扰动）。这是评奖硬指标，不可省略。
 - 模型跑通一个就立刻进入 P3 写对应小节，写作与求解交错推进，不等全部跑完。
 - 代码风格：脚本顶部注释写明输入/输出/运行方式；随机过程固定 seed；单次运行 < 5 分钟。
+- 绘图统一从脚手架的引导模块开始：`from plot_setup import plt, savefig`（`code/plot_setup.py` 已封装 managed runtime 的 sys.path 插入与 CJK 字体，禁止每个脚本手写 sys.path 模板代码）。
+- 超过 30 秒的仿真（Monte Carlo 等）每若干次迭代打印一次进度（如 `if m % 100 == 0: print(...)`），避免调用方误判超时；默认把长循环次数写成常量，便于先小规模试跑再放大。
 
 ### P3 论文写作（Gate：结构完整 + 摘要定稿）
 
 - 按 `references/paper-structure.md` 与 `assets/paper-template.md` 写作，产出 `paper/paper.md`。
 - 写作顺序：先写模型建立与求解各节 → 检验与灵敏度 → 优缺点 → **最后打磨摘要**。摘要是评奖第一权重：问题→方法→结果（具体数字）→结论，一段式，200–400 字（美赛 1 页内）。
 - 公式用 LaTeX；符号表统一符号，全文一致；图表有编号有题注，正文必引用（"如图 1 所示"）。
+- 标题不写手工编号（模板 Heading 样式自动编号）；图片尺寸可用 `![图 1](path){w=10cm}` 标注，无标注按宽高比自动分档。
 - 语言：国赛中文（术语保留英文），美赛英文。
 
 ### P4 校验交付（Gate：precheck 通过 + 成稿 docx）
 
-1. 运行 `python scripts/precheck.py paper/paper.md --lang zh`，修复报告的所有 ERROR，WARN 逐条确认。
+1. **一键出片**：运行 `python scripts/publish.py paper/paper.md`——自动完成 precheck → 生成规范 docx → Word 可用时导出 PDF → 清理临时文件，任一步失败即停。需要分步时：先 `precheck.py` 修全部 ERROR（WARN 逐条确认），再 `build_docx.py`。
 2. 人工复核清单：摘要含具体结果数字；每问都有检验与灵敏度；假设合理且被引用；参考文献格式统一；无 TODO/占位符残留。
-3. 排版按 `references/format-spec.md`（国赛字体字号、三线表、题注、摘要页规范）。**默认交付 Word**：运行 `python scripts/build_docx.py paper/paper.md` 生成 `paper/paper.docx`——全自动、离线，公式经 mathtext 渲染嵌入，图表按规范排版，使用者可直接在 Word 中微调。
-4. 仅当赛事要求 PDF 时：用 markdown-it + 本地 MathJax 生成 HTML，再经系统 Chrome/Edge 无头模式 `--print-to-pdf` 出片（**禁止依赖 CDN**，MathJax 必须本地化——jsdelivr 等公共 CDN 可能超时）。
-5. 交付清单：`paper.docx`（主交付，可编辑）、`paper.pdf`（按需）、`code/`（支撑材料）、`data/SOURCES.md`（数据溯源）、`figures/`。
+3. 排版规范见 `references/format-spec.md`（基于 `assets/cumcm-template.docx` 官方模板）：公式为 Word 原生 OMML（可编辑，失败回退图片），三线表顶/底线 1.5 磅、栏目线 0.5 磅。
+4. 无 Office 环境需 HTML 出片时：用 markdown-it + **本地** MathJax 生成 HTML，再经系统 Chrome/Edge 无头模式 `--print-to-pdf`（**禁止依赖 CDN**——jsdelivr 等公共 CDN 可能超时）。
+5. 交付清单：`paper.docx`（主交付，可编辑）、`paper_word.pdf`（按需）、`code/`（支撑材料）、`data/SOURCES.md`（数据溯源）、`figures/`。
 
 ## 效率规则
 
@@ -74,8 +77,9 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - `references/paper-structure.md` — 国赛/美赛论文结构、摘要与图表规范、评审关注点
 - `references/format-spec.md` — 国赛排版规范（字体字号、页边距、三线表、题注、摘要页）
 - `references/data-sources.md` — 数据库与公开数据源路由（Wind/Gildata/iFinD/World Bank/IMF/Yahoo/SEC 及取数口径）
-- `scripts/scaffold.py` — 初始化比赛项目目录并写入论文模板
-- `scripts/precheck.py` — 提交前自动检查（章节完整性、图表编号引用、摘要、占位符）
-- `scripts/build_docx.py` — paper.md → 国赛规范 docx（基于 assets/cumcm-template.docx 官方模板生成，样式全继承；公式 mathtext 渲染嵌入）
+- `scripts/scaffold.py` — 初始化比赛项目目录：论文模板 + data/SOURCES.md + code/plot_setup.py（绘图引导）
+- `scripts/precheck.py` — 提交前自动检查（章节完整性、图表编号引用、图片存在性、摘要、占位符）
+- `scripts/build_docx.py` — paper.md → 国赛规范 docx（基于官方模板；公式 Word 原生 OMML，失败回退 mathtext 图片；三线表直接画边框；图片尺寸标注/自动分档）
+- `scripts/publish.py` — 一键出片：precheck → docx → Word COM 导出 PDF → 清理临时文件
 - `assets/cumcm-template.docx` — 官方国赛论文标准模板（页面/样式/页脚页码/三线表的唯一格式来源）
-- `assets/paper-template.md` — 论文 Markdown 模板（zh/en 双版内嵌）
+- `assets/paper-template.md` — 论文 Markdown 模板（无手工编号标题，zh/en 双版内嵌）
