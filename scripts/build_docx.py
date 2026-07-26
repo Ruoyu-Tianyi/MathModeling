@@ -113,7 +113,21 @@ def math_png(latex, fontsize=12):
 
 INLINE_MATH_RE = re.compile(r"\$([^$]+)\$")
 BOLD_RE = re.compile(r"\*\*([^*]+)\*\*")
-IMG_RE = re.compile(r"^!\[(.*?)\]\((.*?)\)\s*$")
+IMG_RE = re.compile(r"^!\[(.*?)\]\((.*?)\)(?:\{w=([\d.]+)cm\})?\s*$")
+
+
+def auto_img_width_cm(img_path):
+    """Aspect-ratio tiers: wide >=1.8 -> 13.5 cm, square <=1.2 -> 10 cm,
+    else 12 cm. Used when no {w=..cm} annotation is present."""
+    from PIL import Image
+    with Image.open(img_path) as im:
+        w, h = im.size
+    ratio = w / max(h, 1)
+    if ratio >= 1.8:
+        return 13.5
+    if ratio <= 1.2:
+        return 10.0
+    return 12.0
 CAPTION_RE = re.compile(r"^(图|表)\s*\d+\s*[:：]")
 
 
@@ -304,9 +318,10 @@ def build(md_path: Path, out_path: Path, template: Path):
         m = IMG_RE.match(line.strip())
         if m:
             img_path = (base / m.group(2)).resolve()
+            width_cm = float(m.group(3)) if m.group(3) else auto_img_width_cm(img_path)
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p.add_run().add_picture(str(img_path), width=Cm(12.5))
+            p.add_run().add_picture(str(img_path), width=Cm(width_cm))
             i += 1; continue
         if line.strip().startswith("|"):
             rows = []

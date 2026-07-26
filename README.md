@@ -76,6 +76,10 @@ python scripts/build_docx.py paper/paper.md
 
 > 倒序排列，最新版本在最上。
 
+### V1.2.1（2026-07-26）
+
+- 图片尺寸灵活化：`![图 1](path.png){w=10cm}` 手动标注优先；无标注按宽高比自动分档（宽扁 ≥1.8:1 → 13.5 cm、方正 ≤1.2:1 → 10 cm、其余 → 12 cm），版面更紧凑（B 题论文 10 页 → 9 页）
+
 ### V1.2（2026-07-26）
 
 - **公式升级为 Word 原生 OMML**：LaTeX → MathML（latex2mathml）→ OMML（Office 自带 MML2OMML.XSL），全部离线；公式在 Word 中可编辑（支持 LaTeX 输入法修改），转换失败自动回退 mathtext 图片。B 题论文 78/78 全部原生转换
