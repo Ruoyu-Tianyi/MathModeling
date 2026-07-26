@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
-"""Build a CUMCM-standard .docx paper from paper.md (see references/format-spec.md).
+"""Build a CUMCM-standard .docx paper from paper.md, ON TOP OF the official
+template assets/cumcm-template.docx (V1.1).
+
+The template contributes: A4 page & margins (T/B 2.54, L/R 2.70 cm), its own
+paragraph styles (Heading 1/2/3 黑体, Normal TNR+宋体 12pt, 图表标题 10.5pt
+bold), the 三线表 table style, and the centered page-number footer. This
+script empties the template body and re-writes the paper with those styles.
 
 Fully offline: math is rendered with matplotlib mathtext to embedded PNGs
-(\tag{n} is stripped and re-attached as a right-aligned equation number);
-figures are embedded from local paths; tables become 3-line tables.
+(\tag{n} stripped, re-attached as a right-aligned equation number).
 
 Usage:
-    python build_docx.py <paper.md> [--out paper.docx]
+    python build_docx.py <paper.md> [--out paper.docx] [--template PATH]
 
-Markdown subset supported: #..#### headings, paragraphs, **bold**, - and 1.
-lists, | tables |, ![caption](path), $$..$$ display math, $..$ inline math.
+Markdown subset: #..#### headings, paragraphs, **bold**, - and 1. lists,
+| tables |, ![caption](path), $$..$$ display math, $..$ inline math.
 """
 import argparse
-import io
 import re
 import sys
 from pathlib import Path
@@ -21,58 +25,38 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from docx import Document
-from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
-# ---------------- format spec (references/format-spec.md) -------------------
-SPEC = {
-    "title":   {"ea": "黑体", "ascii": "Times New Roman", "size": 16, "bold": True},
-    "h1":      {"ea": "黑体", "ascii": "Times New Roman", "size": 14, "bold": True},
-    "h2":      {"ea": "黑体", "ascii": "Times New Roman", "size": 12, "bold": True},
-    "h3":      {"ea": "黑体", "ascii": "Times New Roman", "size": 12, "bold": True},
-    "body":    {"ea": "宋体", "ascii": "Times New Roman", "size": 12, "bold": False},
-    "caption": {"ea": "宋体", "ascii": "Times New Roman", "size": 10.5, "bold": False},
-    "table":   {"ea": "宋体", "ascii": "Times New Roman", "size": 10.5, "bold": False},
-}
+TEMPLATE = Path(__file__).resolve().parent.parent / "assets" / "cumcm-template.docx"
+
+# manual-run fonts for elements the template formats manually (title/摘要头)
+TITLE_FONT = {"ea": "黑体", "ascii": "Times New Roman", "size": 16}
+ABSH_FONT = {"ea": "黑体", "ascii": "Times New Roman", "size": 14}
+BODY_SIZE = 12
 
 MATH_IMG = Path(__file__).resolve().parent / "_math_tmp"
 MATH_IMG.mkdir(exist_ok=True)
 _math_counter = 0
 
 
-def set_font(run, style):
-    run.font.name = style["ascii"]
-    run.font.size = Pt(style["size"])
-    run.font.bold = style["bold"]
+def set_font(run, font, bold=None):
+    run.font.name = font["ascii"]
+    run.font.size = Pt(font["size"])
+    if bold is not None:
+        run.font.bold = bold
     run.font.color.rgb = RGBColor(0, 0, 0)
-    run._element.rPr.rFonts.set(qn("w:eastAsia"), style["ea"])
-
-
-def para(doc, style_key, align=None, indent_chars=0, line15=True):
-    p = doc.add_paragraph()
-    pf = p.paragraph_format
-    if align is not None:
-        pf.alignment = align
-    if line15:
-        pf.line_spacing = 1.5
-    pf.space_before = Pt(0)
-    pf.space_after = Pt(0)
-    if indent_chars:
-        # first-line indent measured in characters
-        ind = OxmlElement("w:ind")
-        ind.set(qn("w:firstLineChars"), str(indent_chars * 100))
-        p._p.get_or_add_pPr().append(ind)
-    return p
+    run._element.get_or_add_rPr()
+    rfonts = run._element.rPr.get_or_add_rFonts()
+    rfonts.set(qn("w:eastAsia"), font["ea"])
 
 
 TAG_RE = re.compile(r"\\tag\{([^}]*)\}")
 
 
 def math_png(latex, fontsize=12):
-    """Render latex (no surrounding $) to a PNG; returns (path, w_px, h_px, tag)."""
     global _math_counter
     tag = None
     m = TAG_RE.search(latex)
@@ -105,70 +89,70 @@ IMG_RE = re.compile(r"^!\[(.*?)\]\((.*?)\)\s*$")
 CAPTION_RE = re.compile(r"^(图|表)\s*\d+\s*[:：]")
 
 
-def add_runs(p, text, style, base_dir):
-    """Add text runs to paragraph, handling $math$ and **bold**."""
+def add_runs(p, text, base_size=BODY_SIZE):
+    """Add runs handling $math$ and **bold**; style/fonts come from paragraph style."""
     pos = 0
     for m in INLINE_MATH_RE.finditer(text):
         if m.start() > pos:
-            _add_bold_aware(p, text[pos:m.start()], style)
-        img, w, h, _ = math_png(m.group(1), fontsize=int(style["size"]))
-        height_pt = style["size"] * 1.15
+            _add_bold_aware(p, text[pos:m.start()])
+        img, w, h, _ = math_png(m.group(1), fontsize=int(base_size))
         run = p.add_run()
+        height_pt = base_size * 1.15
         run.add_picture(img, height=Pt(height_pt), width=Pt(height_pt * w / h))
         pos = m.end()
     if pos < len(text):
-        _add_bold_aware(p, text[pos:], style)
+        _add_bold_aware(p, text[pos:])
 
 
-def _add_bold_aware(p, text, style):
+def _add_bold_aware(p, text):
     pos = 0
     for m in BOLD_RE.finditer(text):
         if m.start() > pos:
-            r = p.add_run(text[pos:m.start()]); set_font(r, style)
-        r = p.add_run(m.group(1)); set_font(r, {**style, "bold": True})
+            p.add_run(text[pos:m.start()])
+        r = p.add_run(m.group(1))
+        r.bold = True
         pos = m.end()
     if pos < len(text):
-        r = p.add_run(text[pos:]); set_font(r, style)
-
-
-def set_cell_border(cell, **kwargs):
-    tc_pr = cell._tc.get_or_add_tcPr()
-    borders = OxmlElement("w:tcBorders")
-    for edge, on in kwargs.items():
-        el = OxmlElement(f"w:{edge}")
-        if on:
-            el.set(qn("w:val"), "single"); el.set(qn("w:sz"), "8")
-        else:
-            el.set(qn("w:val"), "nil")
-        borders.append(el)
-    tc_pr.append(borders)
+        p.add_run(text[pos:])
 
 
 def add_table(doc, rows):
-    n_rows, n_cols = len(rows), len(rows[0])
-    t = doc.add_table(rows=n_rows, cols=n_cols)
-    t.alignment = WD_TABLE_ALIGNMENT.CENTER
+    t = doc.add_table(rows=len(rows), cols=len(rows[0]))
+    try:
+        t.style = doc.styles["三线表"]
+    except KeyError:
+        pass
     for i, row in enumerate(rows):
         for j, cell_text in enumerate(row):
             cell = t.cell(i, j)
             cell.text = ""
             p = cell.paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            style = {**SPEC["table"], "bold": (i == 0)}
-            add_runs(p, cell_text, style, None)
-            set_cell_border(cell,
-                            top=(i == 0), bottom=(i in (0, n_rows - 1)),
-                            left=False, right=False,
-                            insideH=False, insideV=False)
+            for r in p.runs:
+                r.font.size = Pt(10.5)
+            add_runs(p, cell_text, base_size=10.5)
+            for r in p.runs:
+                if r.font.size is None:
+                    r.font.size = Pt(10.5)
     return t
 
 
-def build(md_path: Path, out_path: Path):
-    doc = Document()
-    sec = doc.sections[0]
-    sec.page_width, sec.page_height = Cm(21), Cm(29.7)
-    sec.top_margin = sec.bottom_margin = Cm(2.54)
-    sec.left_margin = sec.right_margin = Cm(3.17)
+def first_line_indent(p, chars=2):
+    ind = OxmlElement("w:ind")
+    ind.set(qn("w:firstLineChars"), str(chars * 100))
+    p._p.get_or_add_pPr().append(ind)
+
+
+def clear_body(doc):
+    body = doc.element.body
+    for el in list(body):
+        if el.tag != qn("w:sectPr"):
+            body.remove(el)
+
+
+def build(md_path: Path, out_path: Path, template: Path):
+    doc = Document(str(template))
+    clear_body(doc)
 
     base = md_path.parent
     lines = md_path.read_text(encoding="utf-8").splitlines()
@@ -177,44 +161,48 @@ def build(md_path: Path, out_path: Path):
         line = lines[i].rstrip()
         if not line.strip():
             i += 1; continue
-        # headings
         m = re.match(r"^(#{1,4})\s+(.*)$", line)
         if m:
             level, text = len(m.group(1)), m.group(2)
-            key = {1: "title", 2: "h1", 3: "h2", 4: "h3"}[level]
-            align = WD_ALIGN_PARAGRAPH.CENTER if level == 1 else None
-            p = para(doc, key, align=align)
-            pf = p.paragraph_format
-            pf.space_before = Pt(12 if level <= 2 else 6)
-            pf.space_after = Pt(6)
-            add_runs(p, text, SPEC[key], base)
+            if level == 1:  # paper title: template formats it manually
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                add_runs(p, text, base_size=TITLE_FONT["size"])
+                for r in p.runs:
+                    if r.text:
+                        set_font(r, TITLE_FONT)
+            elif level == 2 and text.strip() in ("摘要", "摘  要"):
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                r = p.add_run("摘  要")
+                set_font(r, ABSH_FONT)
+            else:
+                style = {2: "Heading 1", 3: "Heading 2", 4: "Heading 3"}[level]
+                p = doc.add_paragraph(style=style)
+                add_runs(p, text)
             i += 1; continue
-        # display math block $$ .. $$ (single or multi-line)
         if line.strip().startswith("$$"):
             buf = line.strip()[2:]
             while not buf.endswith("$$"):
                 i += 1
                 buf += lines[i].strip()
-            latex = buf[:-2]
-            img, w, h, tag = math_png(latex, fontsize=13)
-            p = para(doc, "body", align=WD_ALIGN_PARAGRAPH.CENTER)
+            img, w, h, tag = math_png(buf[:-2], fontsize=13)
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.add_run()
             max_w_cm, nat_w_cm = 14.0, w / 300 * 2.54
             scale = min(1.0, max_w_cm / max(nat_w_cm, 0.1))
-            run.add_picture(img, width=Cm(nat_w_cm * scale),
-                            height=Cm(h / 300 * 2.54 * scale))
+            run.add_picture(img, width=Cm(nat_w_cm * scale), height=Cm(h / 300 * 2.54 * scale))
             if tag:
-                r = p.add_run("\t\t（" + tag + "）"); set_font(r, SPEC["body"])
+                p.add_run("\t\t（" + tag + "）")
             i += 1; continue
-        # image
         m = IMG_RE.match(line.strip())
         if m:
             img_path = (base / m.group(2)).resolve()
-            p = para(doc, "body", align=WD_ALIGN_PARAGRAPH.CENTER)
-            run = p.add_run()
-            run.add_picture(str(img_path), width=Cm(12.5))
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.add_run().add_picture(str(img_path), width=Cm(12.5))
             i += 1; continue
-        # table block
         if line.strip().startswith("|"):
             rows = []
             while i < len(lines) and lines[i].strip().startswith("|"):
@@ -225,22 +213,25 @@ def build(md_path: Path, out_path: Path):
             if rows:
                 add_table(doc, rows)
             continue
-        # caption line (图 n：... / 表 n：...)
         if CAPTION_RE.match(line.strip()):
-            p = para(doc, "caption", align=WD_ALIGN_PARAGRAPH.CENTER)
-            add_runs(p, line.strip(), SPEC["caption"], base)
+            try:
+                p = doc.add_paragraph(style="图表标题")
+            except KeyError:
+                p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            add_runs(p, line.strip(), base_size=10.5)
             i += 1; continue
-        # list item
         m = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", line)
         if m:
-            p = para(doc, "body", indent_chars=0)
-            p.paragraph_format.left_indent = Cm(0.75)
-            add_runs(p, m.group(2) + " " + m.group(3) if m.group(2) in "-*"
-                     else m.group(2) + " " + m.group(3), SPEC["body"], base)
+            try:
+                p = doc.add_paragraph(style="List Paragraph")
+            except KeyError:
+                p = doc.add_paragraph()
+            add_runs(p, m.group(2) + " " + m.group(3))
             i += 1; continue
-        # normal paragraph
-        p = para(doc, "body", indent_chars=2)
-        add_runs(p, line.strip(), SPEC["body"], base)
+        p = doc.add_paragraph()
+        first_line_indent(p, 2)
+        add_runs(p, line.strip())
         i += 1
 
     doc.save(out_path)
@@ -250,11 +241,12 @@ def build(md_path: Path, out_path: Path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("paper", help="path to paper.md")
-    ap.add_argument("--out", default=None, help="output docx path")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--template", default=str(TEMPLATE))
     args = ap.parse_args()
     md = Path(args.paper)
     out = Path(args.out) if args.out else md.with_suffix(".docx")
-    build(md, out)
+    build(md, out, Path(args.template))
     print(f"OK: {out} ({out.stat().st_size} bytes)")
 
 

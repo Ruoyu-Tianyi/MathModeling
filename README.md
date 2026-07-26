@@ -82,3 +82,9 @@ python scripts/build_docx.py paper/paper.md
 ## License
 
 MIT
+
+## V1.1 更新日志
+
+- 引入官方国赛论文模板 `assets/cumcm-template.docx`（用户提供），作为排版唯一格式来源
+- `build_docx.py` 重写：直接在官方模板上生成论文，Heading 1/2/3、Normal、图表标题、三线表样式、页脚页码全部继承模板（此前为手写格式参数）
+- `format-spec.md` 更新为模板实测参数（页边距左右 2.70 cm 等）；`paper-structure.md` 章节顺序对齐官方模板（新增"模型的分析与检验""模型的评价、改进与推广"结构）

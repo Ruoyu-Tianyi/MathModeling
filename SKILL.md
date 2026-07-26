@@ -76,5 +76,6 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - `references/data-sources.md` — 数据库与公开数据源路由（Wind/Gildata/iFinD/World Bank/IMF/Yahoo/SEC 及取数口径）
 - `scripts/scaffold.py` — 初始化比赛项目目录并写入论文模板
 - `scripts/precheck.py` — 提交前自动检查（章节完整性、图表编号引用、摘要、占位符）
-- `scripts/build_docx.py` — paper.md → 国赛规范 docx（离线；公式 mathtext 渲染嵌入，图表三线表排版）
+- `scripts/build_docx.py` — paper.md → 国赛规范 docx（基于 assets/cumcm-template.docx 官方模板生成，样式全继承；公式 mathtext 渲染嵌入）
+- `assets/cumcm-template.docx` — 官方国赛论文标准模板（页面/样式/页脚页码/三线表的唯一格式来源）
 - `assets/paper-template.md` — 论文 Markdown 模板（zh/en 双版内嵌）
