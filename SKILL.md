@@ -18,10 +18,14 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 ### P0 审题立项（Gate：产出《问题分析》）
 
 1. 读取赛题全文（用户给的文本 / PDF / 图片先转为文本）。
-2. 拆解为子问题 Q1…Qn，每问标注：题型（评价/预测/优化/机理/数据分析）、拟用模型候选、所需数据及来源。
-3. 查 `references/problem-types.md` 做题型→模型路由；确定整体技术路线。
-4. 输出《问题分析》小节（每问：重述 + 思路 + 模型选择理由 + 数据计划）。若用户在线，简明确认后再进 P1；用户不在线则按最合理方案继续。
-5. 运行 `python scripts/scaffold.py --name <项目名> --lang zh`（美赛用 `en`）生成目录与模板。
+2. **赛道判定（先做，决定后续工作流）**：
+   - **C 型（数据驱动）信号**：附带 Excel/CSV 数据附件；题目动词为"分析/预测/评价/识别/因素"；无物理机理约束；数据字段多、样本量大
+   - **B 型（机理/优化）信号**：几何/物理/工程机理；微分方程、运筹优化、调度规划类；无数据附件或仅小表
+   - 判定结论与理由写入《问题分析》开头。C 型 → 全程按 `references/data-analysis-workflow.md` 执行（清洗→EDA→统计→建模）；B 型 → 按本文件通用流程 + `references/problem-types.md` 机理/优化路径。混合型逐问分流并在问题分析中说明。
+3. 拆解为子问题 Q1…Qn，每问标注：题型（评价/预测/优化/机理/数据分析）、拟用模型候选、所需数据及来源。
+4. 查 `references/problem-types.md` 做题型→模型路由；确定整体技术路线，用 `code/plot_setup.py` 的 `flow()` 绘制技术路线图（放入问题分析）。
+5. 输出《问题分析》小节（赛道判定 + 每问：重述 + 思路 + 模型选择理由 + 数据计划 + 技术路线图）。若用户在线，简明确认后再进 P1；用户不在线则按最合理方案继续。
+6. 运行 `python scripts/scaffold.py --name <项目名> --lang zh`（美赛用 `en`）生成目录与模板。
 
 ### P1 数据获取（Gate：数据落盘 data/ 且来源可溯）
 
@@ -74,6 +78,7 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 ## 资源索引
 
 - `references/problem-types.md` — 题型识别与模型选择路由表（评价/预测/优化/机理/数据分析）
+- `references/data-analysis-workflow.md` — C 型数据驱动赛题 playbook（清洗→EDA→统计→建模→决策，含常见坑与论文映射）
 - `references/paper-structure.md` — 国赛/美赛论文结构、摘要与图表规范、评审关注点
 - `references/format-spec.md` — 国赛排版规范（字体字号、页边距、三线表、题注、摘要页）
 - `references/data-sources.md` — 数据库与公开数据源路由（Wind/Gildata/iFinD/World Bank/IMF/Yahoo/SEC 及取数口径）

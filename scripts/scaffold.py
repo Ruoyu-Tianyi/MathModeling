@@ -47,6 +47,63 @@ def savefig(fig, name):
     fig.savefig(out, bbox_inches="tight", dpi=150)
     print("fig saved:", out)
     return out
+
+
+def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9):
+    """Top-down flowchart for the 技术路线图 / 问题分析 figure.
+
+    layers: [[(key, label), ...], ...]  # each inner list is one row, top->down
+    edges:  [(src_key, dst_key), ...] or [(src, dst, edge_label), ...]
+    name:   output filename under figures/
+
+    Example:
+        flow([("s", "赛题")], [("s", "s")], "fig_flow.png")  # minimal
+        flow([[("a", "读取数据")], [("b", "清洗"), ("c", "EDA")], [("d", "建模")]],
+             [("a", "b"), ("a", "c"), ("b", "d"), ("c", "d")],
+             "fig_flow.png", title="技术路线图")
+    """
+    import matplotlib.patches as mpatches
+
+    label_of = {k: lab for layer in layers for k, lab in layer}
+
+    def box_w(lab):
+        return max(2.4, 0.34 * len(str(lab)) + 1.0)
+
+    pos, widths, maxw = {}, {}, 0.0
+    for li, layer in enumerate(layers):
+        total = sum(box_w(lab) for _, lab in layer) + hgap * max(len(layer) - 1, 0)
+        maxw = max(maxw, total)
+        x = -total / 2
+        for key, lab in layer:
+            w = box_w(lab)
+            pos[key] = (x + w / 2, -li * vgap)
+            widths[key] = w
+            x += w + hgap
+
+    figw = min(max(7.5, maxw * 0.95), 16)
+    figh = max(2.2, len(layers) * vgap * 0.62 + (0.9 if title else 0.3))
+    fig, ax = plt.subplots(figsize=(figw, figh))
+    box_h, ec, fc = 0.95, "#2F5597", "#EAF2FB"
+    for key, (cx, cy) in pos.items():
+        w = widths[key]
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (cx - w / 2, cy - box_h / 2), w, box_h,
+            boxstyle="round,pad=0.08", fc=fc, ec=ec, lw=1.2))
+        ax.text(cx, cy, label_of[key], ha="center", va="center", fontsize=10)
+    for e in edges:
+        src, dst = e[0], e[1]
+        x1, y1 = pos[src]; x2, y2 = pos[dst]
+        ax.add_patch(mpatches.FancyArrowPatch(
+            (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=14,
+            color=ec, lw=1.1, shrinkA=26, shrinkB=26))
+        if len(e) == 3:
+            ax.text((x1 + x2) / 2 + 0.15, (y1 + y2) / 2, str(e[2]), fontsize=8, color=ec)
+    if title:
+        ax.set_title(title, fontsize=12)
+    ax.set_xlim(-maxw / 2 - 1, maxw / 2 + 1)
+    ax.set_ylim(-len(layers) * vgap, vgap * 0.8)
+    ax.axis("off")
+    return savefig(fig, name)
 '''
 
 SOURCES_MD = """# 数据来源记录 (Data Sources)
