@@ -76,18 +76,13 @@ python scripts/build_docx.py paper/paper.md
 
 > 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v1.4.0）。
 
-### V1.4（2026-07-26）
-
-- **C 型（数据驱动）赛题能力**：P0 新增"赛道判定"步骤——B 型（机理/优化）与 C 型（数据驱动）分流执行不同工作流；新增 `references/data-analysis-workflow.md` playbook（清洗 checklist → EDA 四图 → 统计检验选择 → 建模决策，含数据泄漏红线、常见坑、论文映射）
-- **流程图工具**：`plot_setup.flow(layers, edges, ...)` 代码绘制技术路线图（分层自动布局、全离线、与论文图风格统一），问题分析节直接可用
-- C 型工具链端到端验证：scaffold → 合成数据 → EDA → 流程图全部通过
-
 ### V1（2026-07-25/26）
 
 - **交付管线**：Word（docx）优先交付；新增 `build_docx.py`（官方模板驱动）与 `publish.py` 一键出片（precheck → docx → Word 导 PDF → 清理临时文件）
 - **排版与公式**：公式为 Word 原生 OMML（LaTeX → MathML → OMML，全离线，可编辑，失败回退图片）；官方模板 `assets/cumcm-template.docx` 为唯一格式来源；图片尺寸支持 `{w=..cm}` 标注 + 宽高比自动分档
 - **表格**：三线表重写（顶/底线 1.5 磅、栏目线 0.5 磅、单元格直接画边框、首列居中内容列左对齐、垂直居中）
 - **检查与脚手架**：`precheck.py` 增加图片存在性检查、摘要字数剥离 LaTeX 统计；`scaffold.py` 生成 `plot_setup.py` 绘图引导；论文模板标题去手工编号
+- **C 型赛题能力**：P0 新增"赛道判定"（B 型机理 / C 型数据驱动分流）；新增 `references/data-analysis-workflow.md`（清洗 → EDA → 统计 → 建模决策 playbook）；`plot_setup.flow()` 代码绘制技术路线图
 - **规范文档**：`format-spec.md`（模板实测参数）、`paper-structure.md`（章节对齐官方模板）、长仿真进度打印指引、出片禁用公共 CDN 规则
 - 修复：标题自动编号重复、`daimon_runtime` 导入踩坑、MathJax CDN 超时、`\le`/`\tag` 兼容等实战问题
 
