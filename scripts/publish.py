@@ -26,6 +26,8 @@ def main() -> int:
     ap.add_argument("paper", help="path to paper.md")
     ap.add_argument("--lang", choices=["zh", "en"], default="zh")
     ap.add_argument("--no-pdf", action="store_true")
+    ap.add_argument("--appendix-code", default=None, metavar="DIR",
+                    help="forwarded to build_docx: embed .py files as appendix")
     args = ap.parse_args()
     md = Path(args.paper).resolve()
     if not md.is_file():
@@ -39,7 +41,10 @@ def main() -> int:
         return 1
 
     print("[2/4] build docx ...")
-    r = run([sys.executable, str(SKILL_DIR / "build_docx.py"), str(md)])
+    build_cmd = [sys.executable, str(SKILL_DIR / "build_docx.py"), str(md)]
+    if args.appendix_code:
+        build_cmd += ["--appendix-code", args.appendix_code]
+    r = run(build_cmd)
     if r.returncode != 0:
         print("ABORT: docx build failed")
         return 1

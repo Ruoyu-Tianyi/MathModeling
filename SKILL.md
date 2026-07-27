@@ -78,6 +78,7 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 ## 资源索引
 
 - `references/problem-types.md` — 题型识别与模型选择路由表（评价/预测/优化/机理/数据分析）
+- `references/math-writing.md` — 数学写作与公式深度规范（公式链条、双解法互验、解析讨论、段落三件套、摘要加粗规则）
 - `references/data-analysis-workflow.md` — C 型数据驱动赛题 playbook（清洗→EDA→统计→建模→决策，含常见坑与论文映射）
 - `references/paper-structure.md` — 国赛/美赛论文结构、摘要与图表规范、评审关注点
 - `references/format-spec.md` — 国赛排版规范（字体字号、页边距、三线表、题注、摘要页）

@@ -258,12 +258,110 @@ def clear_body(doc):
             body.remove(el)
 
 
-def build(md_path: Path, out_path: Path, template: Path):
+def fix_h1_numbering(doc):
+    """Template Heading-1 auto-number renders '一、'; change to '一 ' (space)."""
+    for part in doc.part.package.parts:
+        if str(part.partname).endswith("numbering.xml"):
+            for el in part.element.iter():
+                if el.tag == qn("w:lvlText") and el.get(qn("w:val"), "").endswith("、"):
+                    el.set(qn("w:val"), el.get(qn("w:val"))[:-1] + " ")
+
+
+def add_page_field(paragraph):
+    """Append a PAGE field to a paragraph."""
+    fld = OxmlElement("w:fldSimple")
+    fld.set(qn("w:instr"), " PAGE ")
+    r = OxmlElement("w:r")
+    fld.append(r)
+    paragraph._p.append(fld)
+
+
+def setup_header_footer(doc, title):
+    """Sample-paper style: header = paper title left + page number right +
+    bottom rule; template's centered footer page number removed."""
+    sec = doc.sections[0]
+    header, footer = sec.header, sec.footer
+    header.is_linked_to_previous = False
+    for p in list(header.paragraphs[1:]):
+        p._p.getparent().remove(p._p)
+    hp = header.paragraphs[0]
+    for r in list(hp.runs):
+        r._element.getparent().remove(r._element)
+    hp.text = ""
+    from docx.enum.text import WD_TAB_ALIGNMENT
+    hp.paragraph_format.tab_stops.add_tab_stop(Cm(15.6), WD_TAB_ALIGNMENT.RIGHT)
+    hp.add_run(title + "\t")
+    add_page_field(hp)
+    ppr = hp._p.get_or_add_pPr()
+    pbdr = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single"); bottom.set(qn("w:sz"), "4")
+    bottom.set(qn("w:color"), "000000"); bottom.set(qn("w:space"), "1")
+    pbdr.append(bottom)
+    ppr.append(pbdr)
+    # clear footer (page number moves to header)
+    footer.is_linked_to_previous = False
+    for p in footer.paragraphs:
+        for child in list(p._p):
+            if child.tag != qn("w:pPr"):
+                p._p.remove(child)
+
+
+CODE_KW = ("import", "from", "def", "return", "for", "while", "if", "else",
+           "elif", "in", "not", "and", "or", "print", "class", "with", "as",
+           "lambda", "None", "True", "False", "try", "except", "raise", "pass")
+
+
+def add_code_block(doc, code_lines):
+    """Fenced code block: line numbers + Consolas 8.5pt + light shading."""
+    for n, cl in enumerate(code_lines, 1):
+        p = doc.add_paragraph()
+        pf = p.paragraph_format
+        pf.space_before = Pt(0); pf.space_after = Pt(0); pf.line_spacing = 1.0
+        ppr = p._p.get_or_add_pPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear"); shd.set(qn("w:fill"), "F5F5F5")
+        ppr.append(shd)
+        rno = p.add_run(f"{n:>4}  ")
+        rno.font.name = "Consolas"; rno.font.size = Pt(8.5)
+        rno.font.color.rgb = RGBColor(0x99, 0x99, 0x99)
+        if cl.strip().startswith("#"):
+            r = p.add_run(cl)
+            r.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
+        else:
+            r = p.add_run(cl)
+        r.font.name = "Consolas"; r.font.size = Pt(8.5)
+
+
+def append_code_files(doc, code_dir):
+    """--appendix-code: append every *.py as Heading 2 + numbered code block."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH as _AL
+    files = sorted(Path(code_dir).glob("*.py"))
+    if not files:
+        print(f"WARN: no .py files in {code_dir}")
+        return
+    for f in files:
+        try:
+            p = doc.add_paragraph(style="Heading 2")
+        except KeyError:
+            p = doc.add_paragraph()
+            p.alignment = _AL.LEFT
+        p.add_run(f.name)
+        lines = f.read_text(encoding="utf-8").splitlines()
+        add_code_block(doc, lines)
+    print(f"appendix: {len(files)} code file(s) embedded")
+
+
+def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
     doc = Document(str(template))
     clear_body(doc)
+    fix_h1_numbering(doc)
 
     base = md_path.parent
     lines = md_path.read_text(encoding="utf-8").splitlines()
+    paper_title = ""
+    seen_abstract = False
+    paged_after_abstract = False
     i = 0
     while i < len(lines):
         line = lines[i].rstrip()
@@ -272,7 +370,8 @@ def build(md_path: Path, out_path: Path, template: Path):
         m = re.match(r"^(#{1,4})\s+(.*)$", line)
         if m:
             level, text = len(m.group(1)), m.group(2)
-            if level == 1:  # paper title: template formats it manually
+            if level == 1:
+                paper_title = text.strip()
                 p = doc.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 add_runs(p, text, base_size=TITLE_FONT["size"])
@@ -280,16 +379,21 @@ def build(md_path: Path, out_path: Path, template: Path):
                     if r.text:
                         set_font(r, TITLE_FONT)
             elif level == 2 and text.strip() in ("摘要", "摘  要"):
+                seen_abstract = True
                 p = doc.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 r = p.add_run("摘  要")
                 set_font(r, ABSH_FONT)
             else:
-                # template Heading styles auto-number; strip manual prefixes
+                if level == 2 and seen_abstract and not paged_after_abstract:
+                    doc.add_page_break()  # 摘要独占一页
+                    paged_after_abstract = True
                 text = re.sub(r"^[一二三四五六七八九十]+、\s*", "", text)
                 text = re.sub(r"^\d+(\.\d+)*[、.\s]\s*", "", text)
                 style = {2: "Heading 1", 3: "Heading 2", 4: "Heading 3"}[level]
                 p = doc.add_paragraph(style=style)
+                if level == 2:
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER  # 范文 H1 居中
                 add_runs(p, text)
             i += 1; continue
         if line.strip().startswith("$$"):
@@ -301,11 +405,14 @@ def build(md_path: Path, out_path: Path, template: Path):
             omml = latex_to_omml(latex)
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            if omml is not None:  # native display equation wrapped in oMathPara
+            if tag:  # 编号贴右页边
+                from docx.enum.text import WD_TAB_ALIGNMENT
+                p.paragraph_format.tab_stops.add_tab_stop(Cm(15.6), WD_TAB_ALIGNMENT.RIGHT)
+            if omml is not None:
                 opara = etree.SubElement(p._p, f"{{{M_NS}}}oMathPara")
                 opara.append(omml)
                 if tag:
-                    p.add_run("\t\t（" + tag + "）")
+                    p.add_run("\t（" + tag + "）")
                 i += 1; continue
             img, w, h, tag = math_png(buf[:-2], fontsize=13)
             run = p.add_run()
@@ -313,8 +420,17 @@ def build(md_path: Path, out_path: Path, template: Path):
             scale = min(1.0, max_w_cm / max(nat_w_cm, 0.1))
             run.add_picture(img, width=Cm(nat_w_cm * scale), height=Cm(h / 300 * 2.54 * scale))
             if tag:
-                p.add_run("\t\t（" + tag + "）")
+                p.add_run("\t（" + tag + "）")
             i += 1; continue
+        if line.strip().startswith("```"):  # fenced code block
+            i += 1
+            code_lines = []
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                code_lines.append(lines[i].rstrip("\n"))
+                i += 1
+            i += 1  # closing fence
+            add_code_block(doc, code_lines)
+            continue
         m = IMG_RE.match(line.strip())
         if m:
             img_path = (base / m.group(2)).resolve()
@@ -334,12 +450,13 @@ def build(md_path: Path, out_path: Path, template: Path):
                 add_table(doc, rows)
             continue
         if CAPTION_RE.match(line.strip()):
+            cap = re.sub(r"^(图|表)(\s*\d+)\s*[：:]\s*", r"\1\2: ", line.strip())  # 半角冒号
             try:
                 p = doc.add_paragraph(style="图表标题")
             except KeyError:
                 p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            add_runs(p, line.strip(), base_size=10.5)
+            add_runs(p, cap, base_size=10.5)
             i += 1; continue
         m = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", line)
         if m:
@@ -349,11 +466,18 @@ def build(md_path: Path, out_path: Path, template: Path):
                 p = doc.add_paragraph()
             add_runs(p, m.group(2) + " " + m.group(3))
             i += 1; continue
+        text_line = line.strip()
+        if text_line.startswith("**关键词**"):  # 关键词内容空格分隔
+            text_line = re.sub(r"[；;,，]\s*", " ", text_line)
         p = doc.add_paragraph()
         first_line_indent(p, 2)
-        add_runs(p, line.strip())
+        add_runs(p, text_line)
         i += 1
 
+    if appendix_code:
+        append_code_files(doc, appendix_code)
+    if paper_title:
+        setup_header_footer(doc, paper_title)
     doc.save(out_path)
     return out_path
 
@@ -363,10 +487,12 @@ def main():
     ap.add_argument("paper", help="path to paper.md")
     ap.add_argument("--out", default=None)
     ap.add_argument("--template", default=str(TEMPLATE))
+    ap.add_argument("--appendix-code", default=None, metavar="DIR",
+                    help="append all .py files under DIR as appendix code blocks")
     args = ap.parse_args()
     md = Path(args.paper)
     out = Path(args.out) if args.out else md.with_suffix(".docx")
-    build(md, out, Path(args.template))
+    build(md, out, Path(args.template), appendix_code=args.appendix_code)
     print(f"OK: {out} ({out.stat().st_size} bytes)")
 
 

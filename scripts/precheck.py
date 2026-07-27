@@ -73,9 +73,30 @@ def check(path: Path, lang: str):
 
     kw_m = re.search(r"关键词\*\*[：:]\s*(.+)", text)
     if kw_m:
-        kws = re.split(r"[；;,，]", kw_m.group(1).strip())
+        kws = re.split(r"[；;,，\s]+", kw_m.group(1).strip())
         if not (3 <= len([k for k in kws if k.strip()]) <= 6):
             warns.append(f"keyword count looks off: {kw_m.group(1).strip()}")
+
+    # --- depth checks (math-writing.md) -------------------------------------
+    # 1) formula density: display-math blocks inside each 建模 H3 section
+    for m in re.finditer(r"####\s+.*?模型(?:的)?建立\s*\n(.*?)(?=\n####|\n###|\n##|\Z)",
+                         text, re.S):
+        n_eq = len(re.findall(r"\$\$.+?\$\$", m.group(1), re.S))
+        if n_eq < 2:
+            warns.append(f"low formula density ({n_eq}) in a 模型建立 section")
+    # 2) thin sections: body < 3 content lines between consecutive headings
+    parts = re.split(r"(?m)^(#{2,4}\s+.*)$", text)
+    for k in range(1, len(parts) - 1, 2):
+        head, body = parts[k], parts[k + 1]
+        if not re.search(r"模型|问题|分析|求解", head):
+            continue
+        lines = [l for l in body.splitlines()
+                 if l.strip() and not l.strip().startswith(("|", "!", "$$"))]
+        if 0 < len(lines) < 3:
+            warns.append(f"thin section (<3 lines): {head.strip()[:30]}")
+    # 3) appendix must contain code
+    if "附录" in text and "```" not in text:
+        warns.append("appendix has no code block (consider --appendix-code)")
 
     return errors, warns
 

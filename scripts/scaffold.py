@@ -42,11 +42,72 @@ FIGDIR = Path(__file__).resolve().parent.parent / "figures"
 FIGDIR.mkdir(exist_ok=True)
 
 
-def savefig(fig, name):
+def savefig(fig, name, dpi=300):
     out = FIGDIR / name
-    fig.savefig(out, bbox_inches="tight", dpi=150)
+    fig.savefig(out, bbox_inches="tight", dpi=dpi)
     print("fig saved:", out)
     return out
+
+
+def paper_style(ax=None, grid=True):
+    """White-background professional style for paper figures.
+
+    Call AFTER plotting: paper_style() uses current axes when ax is None.
+    Removes top/right spines, light-gray thin grid below artists.
+    """
+    import matplotlib.pyplot as _plt
+    ax = ax or _plt.gca()
+    ax.set_facecolor("white")
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color("#888888")
+        ax.spines[side].set_linewidth(0.8)
+    if grid:
+        ax.grid(True, color="#DDDDDD", lw=0.6, alpha=0.8)
+        ax.set_axisbelow(True)
+    ax.tick_params(colors="#333333", labelsize=9)
+    return ax
+
+
+def draw_circle(ax, center, r, label=None, **kw):
+    """Draw a circle (thin dark line by default). Returns the patch."""
+    import matplotlib.patches as mp
+    c = mp.Circle(center, r, fill=False, lw=1.0, color="#333333", **kw)
+    ax.add_patch(c)
+    if label:
+        ax.text(center[0], center[1], label, ha="center", va="center", fontsize=9)
+    return c
+
+
+def mark_point(ax, p, label, color="#C00000", offset=(0.8, 0.6), s=28,
+               fontsize=10, **kw):
+    """Mark a geometry point with a label (offset in points)."""
+    ax.scatter([p[0]], [p[1]], s=s, color=color, zorder=5, **kw)
+    ax.annotate(label, (p[0], p[1]), textcoords="offset points",
+                xytext=offset, fontsize=fontsize, color=color)
+
+
+def mark_angle(ax, vertex, p1, p2, label=None, radius=None, color="#2F5597",
+               fontsize=9, arc_kw=None):
+    """Draw an angle arc at `vertex` between rays to p1 and p2, + label."""
+    import numpy as np
+    import matplotlib.patches as mp
+    v = np.asarray(vertex, float)
+    a = np.asarray(p1, float) - v
+    b = np.asarray(p2, float) - v
+    r = radius or 0.18 * min(np.linalg.norm(a), np.linalg.norm(b))
+    t1 = np.degrees(np.arctan2(a[1], a[0]))
+    t2 = np.degrees(np.arctan2(b[1], b[0]))
+    sweep = (t2 - t1) % 360
+    if sweep > 180:
+        t1, sweep = t2, (t1 - t2) % 360
+    ax.add_patch(mp.Arc(v, 2 * r, 2 * r, angle=0, theta1=t1,
+                        theta2=t1 + sweep, color=color, lw=1.0, **(arc_kw or {})))
+    if label:
+        mid = np.radians(t1 + sweep / 2)
+        ax.text(v[0] + 1.3 * r * np.cos(mid), v[1] + 1.3 * r * np.sin(mid),
+                label, fontsize=fontsize, color=color, ha="center", va="center")
 
 
 def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9):
