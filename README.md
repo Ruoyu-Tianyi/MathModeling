@@ -31,9 +31,46 @@
 
 ## 安装
 
-1、将整个文件夹复制到技能目录，或者直接下载 Release 中的 `math-modeling-contest.skill`（zip 格式）解压到上述目录。
+本技能兼容所有支持 SKILL.md 规范的 AI Agent 运行时（Kimi Work / Kimi Code / Claude Code 等），三种方式任选：
 
-2、或者直接交给你的Agent安装
+### 方式一：交给 Agent 安装（推荐）
+
+克隆本仓库后，对你的 Agent 说：
+
+> 把 math-modeling-contest 技能安装到我的技能目录
+
+Agent 会自动识别当前运行时的技能目录并完成复制。
+
+### 方式二：手动复制
+
+将整个文件夹（或下载 Release 中的 `math-modeling-contest.skill` 解压）复制到任一技能目录：
+
+| 运行时 | 技能目录 |
+|---|---|
+| Kimi Work（Windows） | `C:\Users\<用户名>\AppData\Roaming\kimi-desktop\daimon-share\daimon\skills\math-modeling-contest\` |
+| Kimi Code / 通用 agents | `~/.config/agents/skills/math-modeling-contest/` 或 `~/.kimi/skills/math-modeling-contest/` |
+| Claude Code | `~/.claude/skills/math-modeling-contest/` |
+| 项目级（仅当前项目可用） | `<项目>/.agents/skills/math-modeling-contest/` |
+
+### 方式三：Git 直接克隆到技能目录
+
+```bash
+git clone https://github.com/RuoYu-Tianyi/MathModeling.git <技能目录>/math-modeling-contest
+```
+
+### 依赖环境
+
+- **必需**：Python ≥ 3.9，`pip install python-docx matplotlib latex2mathml lxml pillow numpy`
+- **可选**：本机安装 Microsoft Word（用于公式 OMML 转换与一键导出 PDF；无 Word 时公式自动回退为图片渲染、PDF 步骤自动跳过）
+- Wind / Gildata 等数据插件仅金融赛题需要，非必需
+
+### 验证安装
+
+对 Agent 说"用数模技能做这道题"，技能被触发即安装成功；或运行：
+
+```bash
+python math-modeling-contest/scripts/precheck.py --help
+```
 
 ## 使用
 
