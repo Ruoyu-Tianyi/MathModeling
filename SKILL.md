@@ -40,7 +40,7 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - **深度推理门禁（R1/R4）**：每个模型建立后、写代码前，按 `references/deep-reasoning.md` 在 `analysis/derivations.md` 逐项完成**六检查**（量纲/退化/不变量/界/良态性/反例）并写证据；模型跑通后执行**红队对抗**（≥3 个对抗场景：退化输入、极端比例、边界样本、噪声注入、对抗构造），发现的问题写入论文"模型检验"或"误差分析"节。交卷前对照"分题型深化阶梯"，能上一级就上一级。
 - 每问独立脚本 `code/q1_*.py`、`code/q2_*.py`……从 `data/` 读数，结果图存 `figures/`（编号 fig1, fig2…），数值结果同时打印并写入 `results/`。
 - 图表规范：`from plot_setup import plt, savefig, paper_style`，出图统一 `paper_style()` 白底专业风格；机理示意图用 `draw_circle`/`mark_point`/`mark_angle`，技术路线图用 `flow()`。
-- 每问必须包含**模型检验**（残差/拟合优度/收敛性/对比基线）和**灵敏度或稳健性分析**（至少一个关键参数扰动）。这是评奖硬指标，不可省略。
+- 每问必须包含**模型检验**（残差/拟合优度/收敛性/对比基线）和**灵敏度或稳健性分析**（至少一个关键参数扰动）。这是评奖硬指标，不可省略。灵敏度用 `scripts/sensitivity.py` 自动化：写一个返回指标的 `solve(x)` 包装函数，`sweep()` 自动 ±5%~20% 扫描，`report()` 出扰动曲线图 + 变化表（多参数用 `sweep_multi()` + `tornado()`），禁止手工改参数截图凑数。
 - 模型跑通一个就立刻进入 P3 写对应小节，写作与求解交错推进，不等全部跑完。
 - 代码风格：脚本顶部注释写明输入/输出/运行方式；随机过程固定 seed；单次运行 < 5 分钟。
 - 绘图统一从脚手架的引导模块开始：`from plot_setup import plt, savefig`（`code/plot_setup.py` 已封装 managed runtime 的 sys.path 插入与 CJK 字体，禁止每个脚本手写 sys.path 模板代码）。
@@ -86,8 +86,11 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - `references/paper-structure.md` — 国赛/美赛论文结构、摘要与图表规范、评审关注点
 - `references/format-spec.md` — 国赛排版规范（字体字号、页边距、三线表、题注、摘要页）
 - `references/data-sources.md` — 数据库与公开数据源路由（Wind/Gildata/iFinD/World Bank/IMF/Yahoo/SEC 及取数口径）
+- `references/literature.md` — 文献调研流（scholar 检索 → 筛选 → gb7714.py 格式化 → 写入论文）
 - `scripts/scaffold.py` — 初始化比赛项目目录：论文模板 + data/SOURCES.md + code/plot_setup.py（绘图引导）
-- `scripts/precheck.py` — 提交前自动检查（章节完整性、图表编号引用、图片存在性、摘要、占位符）
+- `scripts/precheck.py` — 提交前自动检查（章节完整性、图表编号引用、图片存在性、摘要、占位符、查重自检、严谨性 WARN）
+- `scripts/sensitivity.py` — 灵敏度分析自动化：±5%~20% 参数扫描 + 扰动曲线图 + 变化表 + tornado 图
+- `scripts/gb7714.py` — GB/T 7714 参考文献格式化（单条 CLI / --json 批量）
 - `scripts/build_docx.py` — paper.md → 国赛规范 docx（基于官方模板；公式 Word 原生 OMML，失败回退 mathtext 图片；三线表直接画边框；图片尺寸标注/自动分档）
 - `scripts/publish.py` — 一键出片：precheck → docx → Word COM 导出 PDF → 清理临时文件
 - `assets/cumcm-template.docx` — 官方国赛论文标准模板（页面/样式/页脚页码/三线表的唯一格式来源）

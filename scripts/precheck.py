@@ -26,7 +26,51 @@ NUM_RE = re.compile(r"\d")
 IMG_MD_RE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
 
 
-def check(path: Path, lang: str):
+# --- plagiarism self-check (N5) ----------------------------------------------
+def _norm_text(t: str) -> str:
+    return re.sub(r"[^\w一-鿿]", "", t.lower())
+
+
+def _shingles(t: str, n: int = 8) -> set:
+    return {t[i:i + n] for i in range(max(len(t) - n + 1, 0))}
+
+
+def _problem_text(problem_dir: Path) -> str:
+    buf = []
+    for f in sorted(problem_dir.iterdir()):
+        try:
+            if f.suffix.lower() in (".txt", ".md"):
+                buf.append(f.read_text(encoding="utf-8", errors="ignore"))
+            elif f.suffix.lower() == ".pdf":
+                from pypdf import PdfReader
+                buf.append("".join(p.extract_text() or "" for p in PdfReader(str(f)).pages))
+        except Exception:
+            continue
+    return "\n".join(buf)
+
+
+def plagiarism_check(text: str, problem_dir: Path, lang: str):
+    """Overlap between the restatement section and problem/ originals.
+    Returns (status, ratio): status in {'ok','warn','error','skip'}."""
+    sec_pat = (r"问题重述\s*\n+(.*?)(?=\n##|\Z)" if lang == "zh"
+               else r"Introduction\s*\n+(.*?)(?=\n##|\Z)")
+    m = re.search(sec_pat, text, re.S)
+    if not m or not problem_dir.is_dir():
+        return "skip", 0.0
+    src = _problem_text(problem_dir)
+    paper_sh = _shingles(_norm_text(m.group(1)))
+    prob_sh = _shingles(_norm_text(src))
+    if not paper_sh or not prob_sh:
+        return "skip", 0.0
+    ratio = len(paper_sh & prob_sh) / len(paper_sh)
+    if ratio > 0.40:
+        return "error", ratio
+    if ratio > 0.25:
+        return "warn", ratio
+    return "ok", ratio
+
+
+def check(path: Path, lang: str, problem_dir: Path = None):
     text = path.read_text(encoding="utf-8")
     errors, warns = [], []
 
@@ -119,6 +163,15 @@ def check(path: Path, lang: str):
                 if sym and not re.search(re.escape(sym[:1]), rest):
                     warns.append(f"symbol {cells[0]} defined but unused in body")
 
+    # --- plagiarism check (N5) -----------------------------------------------
+    pdir = problem_dir or (path.parent.parent / "problem")
+    status, ratio = plagiarism_check(text, pdir, lang)
+    if status == "error":
+        errors.append(f"问题重述/Introduction overlap with problem statement: "
+                      f"{ratio:.0%} (>40%, official rule: never copy the problem)")
+    elif status == "warn":
+        warns.append(f"restatement overlap {ratio:.0%} (>25%, rewrite in your own words)")
+
     return errors, warns
 
 
@@ -126,6 +179,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("paper", help="path to paper.md")
     ap.add_argument("--lang", choices=["zh", "en"], default="zh")
+    ap.add_argument("--problem", default=None,
+                    help="problem-statement dir for plagiarism check "
+                         "(default: ../problem relative to paper/)")
     args = ap.parse_args()
 
     path = Path(args.paper)
@@ -133,7 +189,8 @@ def main() -> int:
         print(f"ERROR: file not found: {path}", file=sys.stderr)
         return 1
 
-    errors, warns = check(path, args.lang)
+    errors, warns = check(path, args.lang,
+                          Path(args.problem) if args.problem else None)
     for e in errors:
         print(f"ERROR: {e}")
     for w in warns:

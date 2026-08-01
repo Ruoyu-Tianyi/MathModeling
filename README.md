@@ -111,7 +111,13 @@ python scripts/build_docx.py paper/paper.md
 
 ## 更新日志
 
-> 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v2.0.0）。
+> 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v2.5.0）。
+
+### V2.5（2026-08-01，自动化工具链补强）
+
+- **N4 灵敏度分析自动化**：新增 `scripts/sensitivity.py`——`sweep()` ±5%~20% 参数扫描重解，`report()` 输出扰动曲线图 + 变化表（支持多指标），`sweep_multi()` + `tornado()` 多参数龙卷风图；评审硬指标零借口
+- **N5 查重自检**：`precheck.py` 新增问题重述与 `problem/` 原文的 8-gram 重合度检测（>40% ERROR 拦截、>25% WARN），支持 `--problem` 指定目录；正/负向测试通过（原创 0 误报、抄题 100% 拦截）
+- **N6 文献调研流**：新增 `references/literature.md`（scholar 检索 → 筛选 → 格式化流程）与 `scripts/gb7714.py`（GB/T 7714 五类文献格式化，单条/批量）
 
 ### V2（2026-08-01，深度推理能力升级）
 
