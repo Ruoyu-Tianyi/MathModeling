@@ -232,11 +232,15 @@ def main() -> int:
     for d in DIRS:
         (root / d).mkdir(parents=True, exist_ok=True)
 
-    template = Path(__file__).resolve().parent.parent / "assets" / "paper-template.md"
+    template_name = "paper-template-en.md" if args.lang == "en" else "paper-template.md"
+    template = Path(__file__).resolve().parent.parent / "assets" / template_name
     shutil.copy(template, root / "paper" / "paper.md")
     (root / "data" / "SOURCES.md").write_text(SOURCES_MD, encoding="utf-8")
     (root / "code" / "plot_setup.py").write_text(PLOT_SETUP, encoding="utf-8")
     (root / "analysis" / "derivations.md").write_text(DERIVATIONS_MD, encoding="utf-8")
+    if args.lang == "en":
+        ai = Path(__file__).resolve().parent.parent / "assets" / "ai-use-report.md"
+        shutil.copy(ai, root / "paper" / "ai-use-report.md")
 
     print(f"OK: project created at {root}")
     for d in DIRS:
@@ -245,6 +249,8 @@ def main() -> int:
     print("  - data/SOURCES.md")
     print("  - code/plot_setup.py (plot bootstrap)")
     print("  - analysis/derivations.md (deep-reasoning scratchpad)")
+    if args.lang == "en":
+        print("  - paper/ai-use-report.md (COMAP mandatory)")
     return 0
 
 

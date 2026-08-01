@@ -26,6 +26,8 @@ def main() -> int:
     ap.add_argument("paper", help="path to paper.md")
     ap.add_argument("--lang", choices=["zh", "en"], default="zh")
     ap.add_argument("--no-pdf", action="store_true")
+    ap.add_argument("--mcm", action="store_true",
+                    help="MCM mode: en precheck + mcm-template docx")
     ap.add_argument("--appendix-code", default=None, metavar="DIR",
                     help="forwarded to build_docx: embed .py files as appendix")
     args = ap.parse_args()
@@ -33,15 +35,20 @@ def main() -> int:
     if not md.is_file():
         print(f"ERROR: not found: {md}")
         return 1
+    lang = "en" if args.mcm else args.lang
 
     print("[1/4] precheck ...")
-    r = run([sys.executable, str(SKILL_DIR / "precheck.py"), str(md), "--lang", args.lang])
+    r = run([sys.executable, str(SKILL_DIR / "precheck.py"), str(md), "--lang", lang])
     if r.returncode != 0:
         print("ABORT: fix precheck errors first")
         return 1
 
     print("[2/4] build docx ...")
     build_cmd = [sys.executable, str(SKILL_DIR / "build_docx.py"), str(md)]
+    if args.mcm:
+        build_cmd += ["--mcm"]
+    else:
+        build_cmd += ["--lang", lang]
     if args.appendix_code:
         build_cmd += ["--appendix-code", args.appendix_code]
     r = run(build_cmd)

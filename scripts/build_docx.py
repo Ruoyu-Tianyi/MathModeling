@@ -129,6 +129,7 @@ def auto_img_width_cm(img_path):
         return 10.0
     return 12.0
 CAPTION_RE = re.compile(r"^(图|表)\s*\d+\s*[:：]")
+CAPTION_RE_EN = re.compile(r"^(Figure|Table)\s*\d+\s*[:：]", re.I)
 
 
 def add_runs(p, text, base_size=BODY_SIZE):
@@ -352,10 +353,14 @@ def append_code_files(doc, code_dir):
     print(f"appendix: {len(files)} code file(s) embedded")
 
 
-def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
+def build(md_path: Path, out_path: Path, template: Path, appendix_code=None,
+          lang="zh"):
     doc = Document(str(template))
     clear_body(doc)
-    fix_h1_numbering(doc)
+    if lang == "zh":
+        fix_h1_numbering(doc)
+    en = lang == "en"
+    caption_re = CAPTION_RE_EN if en else CAPTION_RE
 
     base = md_path.parent
     lines = md_path.read_text(encoding="utf-8").splitlines()
@@ -378,11 +383,11 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
                 for r in p.runs:
                     if r.text:
                         set_font(r, TITLE_FONT)
-            elif level == 2 and text.strip() in ("摘要", "摘  要"):
+            elif level == 2 and text.strip() in ("摘要", "摘  要", "Summary"):
                 seen_abstract = True
                 p = doc.add_paragraph()
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                r = p.add_run("摘  要")
+                r = p.add_run("摘  要" if not en else "Summary")
                 set_font(r, ABSH_FONT)
             else:
                 if level == 2 and seen_abstract and not paged_after_abstract:
@@ -392,8 +397,8 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
                 text = re.sub(r"^\d+(\.\d+)*[、.\s]\s*", "", text)
                 style = {2: "Heading 1", 3: "Heading 2", 4: "Heading 3"}[level]
                 p = doc.add_paragraph(style=style)
-                if level == 2:
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER  # 范文 H1 居中
+                if level == 2 and not en:
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER  # 国赛范文 H1 居中；MCM 左对齐
                 add_runs(p, text)
             i += 1; continue
         if line.strip().startswith("$$"):
@@ -449,12 +454,21 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
             if rows:
                 add_table(doc, rows)
             continue
-        if CAPTION_RE.match(line.strip()):
-            cap = re.sub(r"^(图|表)(\s*\d+)\s*[：:]\s*", r"\1\2: ", line.strip())  # 半角冒号
-            try:
-                p = doc.add_paragraph(style="图表标题")
-            except KeyError:
-                p = doc.add_paragraph()
+        if caption_re.match(line.strip()):
+            if en:
+                cap = re.sub(r"^(Figure|Table)(\s*\d+)\s*[：:]\s*",
+                             lambda mm: f"{mm.group(1).capitalize()}{mm.group(2)}: ",
+                             line.strip(), flags=re.I)
+                try:
+                    p = doc.add_paragraph(style="Caption")
+                except KeyError:
+                    p = doc.add_paragraph()
+            else:
+                cap = re.sub(r"^(图|表)(\s*\d+)\s*[：:]\s*", r"\1\2: ", line.strip())
+                try:
+                    p = doc.add_paragraph(style="图表标题")
+                except KeyError:
+                    p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             add_runs(p, cap, base_size=10.5)
             i += 1; continue
@@ -467,16 +481,17 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
             add_runs(p, m.group(2) + " " + m.group(3))
             i += 1; continue
         text_line = line.strip()
-        if text_line.startswith("**关键词**"):  # 关键词内容空格分隔
+        if text_line.startswith(("**关键词**", "**Keywords**")):  # 关键词内容空格分隔
             text_line = re.sub(r"[；;,，]\s*", " ", text_line)
         p = doc.add_paragraph()
-        first_line_indent(p, 2)
+        if not en:
+            first_line_indent(p, 2)
         add_runs(p, text_line)
         i += 1
 
     if appendix_code:
         append_code_files(doc, appendix_code)
-    if paper_title:
+    if paper_title and not en:  # 国赛范文式页眉；MCM 用模板页脚页码、匿名
         setup_header_footer(doc, paper_title)
     doc.save(out_path)
     return out_path
@@ -487,12 +502,20 @@ def main():
     ap.add_argument("paper", help="path to paper.md")
     ap.add_argument("--out", default=None)
     ap.add_argument("--template", default=str(TEMPLATE))
+    ap.add_argument("--lang", choices=["zh", "en"], default="zh")
+    ap.add_argument("--mcm", action="store_true",
+                    help="MCM mode: assets/mcm-template.docx + English rules")
     ap.add_argument("--appendix-code", default=None, metavar="DIR",
                     help="append all .py files under DIR as appendix code blocks")
     args = ap.parse_args()
     md = Path(args.paper)
     out = Path(args.out) if args.out else md.with_suffix(".docx")
-    build(md, out, Path(args.template), appendix_code=args.appendix_code)
+    if args.mcm:
+        template = Path(__file__).resolve().parent.parent / "assets" / "mcm-template.docx"
+        lang = "en"
+    else:
+        template, lang = Path(args.template), args.lang
+    build(md, out, template, appendix_code=args.appendix_code, lang=lang)
     print(f"OK: {out} ({out.stat().st_size} bytes)")
 
 

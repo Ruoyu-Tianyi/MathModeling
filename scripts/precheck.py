@@ -68,6 +68,21 @@ def check(path: Path, lang: str):
     elif "摘要" in text:
         warns.append("could not isolate abstract body for checks")
 
+    if lang == "en":
+        sm = re.search(r"Summary\s*\n+(.*?)\n\s*\*\*Keywords", text, re.S)
+        if sm:
+            body = re.sub(r"\$[^$]+\$", "M", sm.group(1))
+            words = len(re.sub(r"[^\w\s-]", " ", body).split())
+            if not (100 <= words <= 450):
+                warns.append(f"summary length {words} words (expect 100-450)")
+            if not NUM_RE.search(body):
+                errors.append("summary contains no numeric result")
+        kw_en = re.search(r"Keywords\*\*[：:]\s*(.+)", text)
+        if kw_en:
+            kws = [k.strip() for k in re.split(r"[；;,，]", kw_en.group(1).strip()) if k.strip()]
+            if not (3 <= len(kws) <= 6):
+                warns.append(f"keyword count looks off: {kw_en.group(1).strip()}")
+
     if "灵敏度" not in text and "Sensitivity" not in text:
         errors.append("no sensitivity analysis section found")
 
@@ -97,6 +112,10 @@ def check(path: Path, lang: str):
     # 3) appendix must contain code
     if "附录" in text and "```" not in text:
         warns.append("appendix has no code block (consider --appendix-code)")
+
+    # 3b) MCM: mandatory AI-use report (COMAP 2024+)
+    if lang == "en" and "Report on Use of AI" not in text:
+        errors.append("missing mandatory COMAP section: Report on Use of AI")
 
     # --- rigor checks (deep-reasoning.md, R5) --------------------------------
     # 4) assumptions count + each assumption should be referenced later

@@ -1,4 +1,6 @@
-# MatgModeling Skill（V2）
+# MatgModeling Skill（V2 · MCM 分支）
+
+> 本分支为**美赛（MCM/ICM）专用版**：英文模板、COMAP 合规（AI 使用报告）、US Letter 出片。国赛请用 `main` 分支。
 
 **把赛题交给Agent → 输出可直接提交、可继续编辑的建模论文（Word）**（含模型推导、可运行代码、规范图表、摘要与参考文献）。适用于国赛（CUMCM）、美赛（MCM/ICM）及同类赛事，面向 所有支持 SKILL.md 规范的 AI Agent 运行。
 
@@ -115,6 +117,7 @@ python scripts/build_docx.py paper/paper.md
 
 ### V2（2026-08-01，深度推理能力升级）
 
+- **【MCM 分支】美赛专用版**：`assets/mcm-template.docx`（US Letter/TNR 12pt/Page X 页脚，`make_mcm_template.py` 生成）；英文论文模板 `paper-template-en.md`；COMAP 强制 **AI 使用报告**模板 `ai-use-report.md`（2024 起必需）；`build_docx.py --mcm` / `publish.py --mcm` 一键美赛链路；`precheck.py --lang en` 检查 Summary 字数与 AI 报告（缺失即 ERROR）；`references/mcm-format.md` 美赛硬性规则（25 页上限、Summary Sheet、匿名性）
 - **推导稿制度（R2）**：P0 后强制纸面推导先行——`scaffold.py` 生成 `analysis/derivations.md` 骨架（定义与符号 → 引理 → 推导 → 可解形式），代码只许实现推导稿结论
 - **六检查协议（R1）**：新增 `references/deep-reasoning.md`，模型建立后逐项过"量纲 / 退化检验 / 不变量 / 界与误差 / 良态性 / 反例压力测试"并留证据，写进 P2 门禁
 - **分题型深化阶梯（R3）**：优化 / 统计 / 机理 / 评价 / 预测 / 几何六类题的"能用 → 扎实 → 深刻"升级路径，交卷前对照升级

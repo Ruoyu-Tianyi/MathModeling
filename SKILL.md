@@ -79,6 +79,9 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 
 ## 资源索引
 
+> 本分支（mcm）含美赛专用资产；国赛路径与 main 一致。美赛做题：`scaffold.py --lang en` 起项目，`publish.py --mcm` 出片，规范见 `references/mcm-format.md`。
+
+- `references/mcm-format.md` — 【MCM 专用】美赛硬性规则（25 页上限、Summary Sheet、匿名性、AI 使用报告强制）与国赛流程差异
 - `references/problem-types.md` — 题型识别与模型选择路由表（评价/预测/优化/机理/数据分析）
 - `references/deep-reasoning.md` — 深度推理协议：推导稿制度、六检查、分题型深化阶梯、红队对抗清单
 - `references/math-writing.md` — 数学写作与公式深度规范（公式链条、双解法互验、解析讨论、段落三件套、摘要加粗规则）
@@ -86,9 +89,13 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - `references/paper-structure.md` — 国赛/美赛论文结构、摘要与图表规范、评审关注点
 - `references/format-spec.md` — 国赛排版规范（字体字号、页边距、三线表、题注、摘要页）
 - `references/data-sources.md` — 数据库与公开数据源路由（Wind/Gildata/iFinD/World Bank/IMF/Yahoo/SEC 及取数口径）
-- `scripts/scaffold.py` — 初始化比赛项目目录：论文模板 + data/SOURCES.md + code/plot_setup.py（绘图引导）
-- `scripts/precheck.py` — 提交前自动检查（章节完整性、图表编号引用、图片存在性、摘要、占位符）
-- `scripts/build_docx.py` — paper.md → 国赛规范 docx（基于官方模板；公式 Word 原生 OMML，失败回退 mathtext 图片；三线表直接画边框；图片尺寸标注/自动分档）
-- `scripts/publish.py` — 一键出片：precheck → docx → Word COM 导出 PDF → 清理临时文件
+- `scripts/scaffold.py` — 初始化比赛项目目录（`--lang en` 用英文模板并附 AI 使用报告）：论文模板 + data/SOURCES.md + code/plot_setup.py + analysis/derivations.md
+- `scripts/precheck.py` — 提交前自动检查（zh/en 双语清单；en 强制检查 COMAP AI 使用报告）
+- `scripts/build_docx.py` — paper.md → 规范 docx（`--mcm` 用美赛模板；公式 Word 原生 OMML；三线表；图片尺寸标注/自动分档）
+- `scripts/publish.py` — 一键出片（`--mcm` 美赛链路）：precheck → docx → Word COM 导出 PDF → 清理临时文件
+- `scripts/make_mcm_template.py` — 【MCM 专用】按 references/mcm-format.md 参数生成 assets/mcm-template.docx
 - `assets/cumcm-template.docx` — 官方国赛论文标准模板（页面/样式/页脚页码/三线表的唯一格式来源）
-- `assets/paper-template.md` — 论文 Markdown 模板（无手工编号标题，zh/en 双版内嵌）
+- `assets/mcm-template.docx` — 【MCM 专用】美赛基础模板（US Letter、TNR 12pt、Page X 页脚）
+- `assets/paper-template.md` — 论文 Markdown 模板（国赛中文版）
+- `assets/paper-template-en.md` — 【MCM 专用】英文论文模板（含 Report on Use of AI 节）
+- `assets/ai-use-report.md` — 【MCM 专用】COMAP AI 使用报告模板
