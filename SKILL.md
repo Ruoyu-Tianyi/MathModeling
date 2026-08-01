@@ -26,6 +26,7 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 4. 查 `references/problem-types.md` 做题型→模型路由；确定整体技术路线，用 `code/plot_setup.py` 的 `flow()` 绘制技术路线图（放入问题分析）。
 5. 输出《问题分析》小节（赛道判定 + 每问：重述 + 思路 + 模型选择理由 + 数据计划 + 技术路线图）。若用户在线，简明确认后再进 P1；用户不在线则按最合理方案继续。
 6. 运行 `python scripts/scaffold.py --name <项目名> --lang zh`（美赛用 `en`）生成目录与模板。
+7. **推导稿先行（R2）**：先写 `analysis/derivations.md`——每问完成"定义与符号 → 引理 → 推导 → 可解形式"的纸面推导，再进入 P1/P2；**代码只许实现推导稿的结论**，禁止边写代码边想模型。
 
 ### P1 数据获取（Gate：数据落盘 data/ 且来源可溯）
 
@@ -34,10 +35,11 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - 所有原始数据保存到 `data/`，文件名带来源与日期；在 `data/SOURCES.md` 逐条记录：来源、接口、查询参数、取数时间、字段含义。
 - 同一数据集只取一次，复用不落重复请求。
 
-### P2 建模求解（Gate：每问模型跑通 + 有检验）
+### P2 建模求解（Gate：每问模型跑通 + 有检验 + 六检查 + 红队）
 
+- **深度推理门禁（R1/R4）**：每个模型建立后、写代码前，按 `references/deep-reasoning.md` 在 `analysis/derivations.md` 逐项完成**六检查**（量纲/退化/不变量/界/良态性/反例）并写证据；模型跑通后执行**红队对抗**（≥3 个对抗场景：退化输入、极端比例、边界样本、噪声注入、对抗构造），发现的问题写入论文"模型检验"或"误差分析"节。交卷前对照"分题型深化阶梯"，能上一级就上一级。
 - 每问独立脚本 `code/q1_*.py`、`code/q2_*.py`……从 `data/` 读数，结果图存 `figures/`（编号 fig1, fig2…），数值结果同时打印并写入 `results/`。
-- 图表规范：managed Python 下先 `from daimon_runtime import setup_plot; setup_plot()`，统一字体与配色；`fig.savefig("figures/figN_描述.png", bbox_inches="tight")`。
+- 图表规范：`from plot_setup import plt, savefig, paper_style`，出图统一 `paper_style()` 白底专业风格；机理示意图用 `draw_circle`/`mark_point`/`mark_angle`，技术路线图用 `flow()`。
 - 每问必须包含**模型检验**（残差/拟合优度/收敛性/对比基线）和**灵敏度或稳健性分析**（至少一个关键参数扰动）。这是评奖硬指标，不可省略。
 - 模型跑通一个就立刻进入 P3 写对应小节，写作与求解交错推进，不等全部跑完。
 - 代码风格：脚本顶部注释写明输入/输出/运行方式；随机过程固定 seed；单次运行 < 5 分钟。
@@ -78,6 +80,7 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 ## 资源索引
 
 - `references/problem-types.md` — 题型识别与模型选择路由表（评价/预测/优化/机理/数据分析）
+- `references/deep-reasoning.md` — 深度推理协议：推导稿制度、六检查、分题型深化阶梯、红队对抗清单
 - `references/math-writing.md` — 数学写作与公式深度规范（公式链条、双解法互验、解析讨论、段落三件套、摘要加粗规则）
 - `references/data-analysis-workflow.md` — C 型数据驱动赛题 playbook（清洗→EDA→统计→建模→决策，含常见坑与论文映射）
 - `references/paper-structure.md` — 国赛/美赛论文结构、摘要与图表规范、评审关注点

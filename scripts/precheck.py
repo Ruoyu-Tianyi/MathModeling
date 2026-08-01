@@ -98,6 +98,27 @@ def check(path: Path, lang: str):
     if "附录" in text and "```" not in text:
         warns.append("appendix has no code block (consider --appendix-code)")
 
+    # --- rigor checks (deep-reasoning.md, R5) --------------------------------
+    # 4) assumptions count + each assumption should be referenced later
+    am = re.search(r"模型假设\s*\n+(.*?)(?=\n##|\Z)", text, re.S)
+    if am:
+        items = re.findall(r"(?m)^\s*\d+\.\s", am.group(1))
+        if len(items) < 3:
+            warns.append(f"only {len(items)} assumptions (expect >=3)")
+        body_after = text[am.end():]
+        if "假设" not in body_after:
+            warns.append("assumptions never referenced in later sections")
+    # 5) symbol-table symbols should be used in the body
+    sm = re.search(r"符号说明\s*\n+(\|.*?)(?=\n##|\Z)", text, re.S)
+    if sm:
+        rest = text[sm.end():]
+        for row in sm.group(1).splitlines():
+            cells = [c.strip() for c in row.strip().strip("|").split("|")]
+            if len(cells) >= 2 and cells[0].startswith("$"):
+                sym = cells[0].strip("$").replace("\\", "")
+                if sym and not re.search(re.escape(sym[:1]), rest):
+                    warns.append(f"symbol {cells[0]} defined but unused in body")
+
     return errors, warns
 
 

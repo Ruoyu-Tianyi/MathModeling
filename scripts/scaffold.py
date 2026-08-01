@@ -18,7 +18,47 @@ import shutil
 import sys
 from pathlib import Path
 
-DIRS = ["problem", "data", "code", "figures", "results", "paper"]
+DIRS = ["problem", "data", "code", "figures", "results", "paper", "analysis"]
+
+DERIVATIONS_MD = """# 推导稿（工作文档，不入最终论文）
+
+> 制度见 references/deep-reasoning.md：纸面推导先行，代码只实现本文档的结论。
+
+## 赛道判定
+
+- 判定：B 型 / C 型 / 混合型（理由：）
+
+## Q1 模型推导
+
+### 定义与符号
+
+<!-- 每个量：符号 / 定义域 / 量纲 -->
+
+### 引理/中间结论
+
+<!-- 可独立证明的小结论 -->
+
+### 推导
+
+<!-- 定义 → 引理 → 可解形式，每步一句话理由 -->
+
+### 可解形式
+
+<!-- 最终方程/算法的输入输出 -->
+
+### 六检查记录
+
+1. 量纲一致：
+2. 退化检验：
+3. 不变量：
+4. 界与误差：
+5. 良态性（奇异构型）：
+6. 反例压力测试（≥3 个对抗场景）：
+
+## Q2 模型推导
+
+<!-- 同 Q1 结构 -->
+"""
 
 PLOT_SETUP = '''"""Plot bootstrap for the managed Python runtime: sys.path + CJK fonts.
 
@@ -196,6 +236,7 @@ def main() -> int:
     shutil.copy(template, root / "paper" / "paper.md")
     (root / "data" / "SOURCES.md").write_text(SOURCES_MD, encoding="utf-8")
     (root / "code" / "plot_setup.py").write_text(PLOT_SETUP, encoding="utf-8")
+    (root / "analysis" / "derivations.md").write_text(DERIVATIONS_MD, encoding="utf-8")
 
     print(f"OK: project created at {root}")
     for d in DIRS:
@@ -203,6 +244,7 @@ def main() -> int:
     print("  - paper/paper.md (from template)")
     print("  - data/SOURCES.md")
     print("  - code/plot_setup.py (plot bootstrap)")
+    print("  - analysis/derivations.md (deep-reasoning scratchpad)")
     return 0
 
 
