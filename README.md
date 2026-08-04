@@ -5,6 +5,7 @@
 ## 功能特性
 
 - **五阶段流水线，各设质量门禁**：审题立项 → 数据获取 → 建模求解 → 论文写作 → 校验交付
+- **B/C 双赛道分流（V3）**：P0 判定清单逐问计分 + 用户确认后进入专属路径——B 型（机理/优化）走无噪声验证、多解性枚举、噪声地板等检验武器；C 型（数据驱动）走一键 EDA + 评价/预测/统计/优化决策树
 - **题型→模型路由**：评价 / 预测 / 优化 / 机理 / 数据分析五大类，每问"主模型 + 对比基线"，拒绝模型堆砌
 - **真实数据接入**：内置数据源路由表，金融/宏观数据自动路由到 Wind、Gildata、iFinD、World Bank、IMF、SEC、Yahoo Finance 等数据插件；取不到的数据走可复现仿真并在论文中声明，**严禁编造数据**
 - **强制质量项**：每问必须含模型检验与灵敏度分析；摘要最后定稿且必须含具体数值结果
@@ -18,14 +19,25 @@
 ├── SKILL.md                      # 技能主入口（AI 加载此文件启动工作流）
 ├── references/
 │   ├── problem-types.md          # 题型识别与模型选择路由表
+│   ├── track-b-modeling.md       # B 赛道理工方法论（V3 新增）
+│   ├── track-c-modeling.md       # C 赛道数据方法论（V3 新增）
+│   ├── data-analysis-workflow.md # C 型赛题数据工作流 playbook
+│   ├── deep-reasoning.md         # 深度推理协议（推导稿/六检查/红队）
+│   ├── math-writing.md           # 数学写作与公式深度规范
 │   ├── paper-structure.md        # 国赛/美赛论文结构、摘要写法、评审关注点
-│   ├── format-spec.md            # 国赛排版规范（V1 新增）
-│   └── data-sources.md           # 数据源路由与取数规范
+│   ├── format-spec.md            # 国赛排版规范
+│   ├── data-sources.md           # 数据源路由与取数规范
+│   └── literature.md             # 文献调研流（GB/T 7714）
 ├── scripts/
-│   ├── scaffold.py               # 初始化比赛项目目录
-│   ├── precheck.py               # 论文提交前自动检查
-│   └── build_docx.py             # paper.md → 国赛规范 Word（V1 新增）
+│   ├── scaffold.py               # 初始化比赛项目目录（含 plot_setup 绘图引导）
+│   ├── eda.py                    # C 赛道一键数据探查报告（V3 新增）
+│   ├── precheck.py               # 论文提交前自动检查（含查重自检）
+│   ├── sensitivity.py            # 灵敏度分析自动化
+│   ├── gb7714.py                 # GB/T 7714 参考文献格式化
+│   ├── build_docx.py             # paper.md → 国赛规范 Word
+│   └── publish.py                # 一键出片（precheck → docx → PDF）
 └── assets/
+    ├── cumcm-template.docx       # 官方国赛论文标准模板
     └── paper-template.md         # 论文 Markdown 模板
 ```
 
@@ -111,7 +123,15 @@ python scripts/build_docx.py paper/paper.md
 
 ## 更新日志
 
-> 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v2.5.0）。
+> 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v3.0.0）。
+
+### V3（2026-08-04，B/C 双赛道分流工作流）
+
+- **双路径路由（不开分支，单仓库维护）**：P0 赛道判定升级为"判定清单逐问计分 + 命中信号举证 + 用户确认"三步；判定后分流到专属方法论文件——B 型走 `references/track-b-modeling.md`，C 型走 `references/track-c-modeling.md` + `data-analysis-workflow.md`，混合型逐问分流
+- **`track-b-modeling.md`（B 题实战沉淀）**：无噪声先验验证（机器精度证明实现正确）、多解性/镜像解枚举（解个数随约束数变化成表）、误差传播链与噪声地板（解析 + Monte Carlo 双证据）、迭代收敛曲线规范、退化检验当定理用、B 题灵敏度对象（物理参数/测量精度/构型/分布假设）
+- **`track-c-modeling.md`（C 题方法论深化）**：评价/预测/统计推断/数据驱动优化四类决策树；熵权/TOPSIS/AHP 完整公式链；时序（ADF→ARIMA→残差白噪声）与回归（VIF 共线性、防数据泄漏）路线纪律；C 题灵敏度与检验清单；EDA 发现编号回引的论文写法
+- **`scripts/eda.py` 一键数据探查**：读 Excel/CSV 自动产出分布网格图、相关系数热力图、时序面板（含滑动平均）、分组箱线图 + 缺失/统计三线表 + 自动发现列表（高缺失、共线对、偏态、异常点、重复行），合成数据自测全部命中预埋异常
+- **流程图能力增强**：`plot_setup.flow()` 新增 `orientation="lr"` 横向布局（数据→参数→优化链条图）与 `phases=[...]` 阶段泳道标签，旧调用完全兼容
 
 ### V2.5（2026-08-01，自动化工具链补强）
 

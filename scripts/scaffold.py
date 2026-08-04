@@ -150,41 +150,66 @@ def mark_angle(ax, vertex, p1, p2, label=None, radius=None, color="#2F5597",
                 label, fontsize=fontsize, color=color, ha="center", va="center")
 
 
-def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9):
-    """Top-down flowchart for the 技术路线图 / 问题分析 figure.
+def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9,
+         orientation="tb", phases=None):
+    """Flowchart for 技术路线图 / 模型框架图 / 数据链路图.
 
-    layers: [[(key, label), ...], ...]  # each inner list is one row, top->down
+    layers: [[(key, label), ...], ...]  # each inner list is one stage
     edges:  [(src_key, dst_key), ...] or [(src, dst, edge_label), ...]
     name:   output filename under figures/
+    orientation: "tb" stages top-down (default); "lr" stages left-to-right
+    phases: optional per-stage swimlane labels (list aligned with layers;
+            None entries skipped). Shown left of rows (tb) / above columns (lr).
 
     Example:
-        flow([("s", "赛题")], [("s", "s")], "fig_flow.png")  # minimal
         flow([[("a", "读取数据")], [("b", "清洗"), ("c", "EDA")], [("d", "建模")]],
              [("a", "b"), ("a", "c"), ("b", "d"), ("c", "d")],
-             "fig_flow.png", title="技术路线图")
+             "fig_flow.png", title="技术路线图",
+             phases=["数据", "预处理", "建模"])
     """
     import matplotlib.patches as mpatches
 
+    tb = orientation != "lr"
+    box_h, ec, fc = 0.95, "#2F5597", "#EAF2FB"
     label_of = {k: lab for layer in layers for k, lab in layer}
 
     def box_w(lab):
         return max(2.4, 0.34 * len(str(lab)) + 1.0)
 
+    if tb:
+        main_step = vgap
+
+        def span(layer):
+            return sum(box_w(l) for _, l in layer) + hgap * max(len(layer) - 1, 0)
+    else:
+        main_step = max(box_w(l) for layer in layers for _, l in layer) + max(hgap, 1.2)
+
+        def span(layer):
+            return len(layer) * (box_h + 0.55) - 0.55
+
     pos, widths, maxw = {}, {}, 0.0
     for li, layer in enumerate(layers):
-        total = sum(box_w(lab) for _, lab in layer) + hgap * max(len(layer) - 1, 0)
+        total = span(layer)
         maxw = max(maxw, total)
-        x = -total / 2
+        u = -total / 2
         for key, lab in layer:
             w = box_w(lab)
-            pos[key] = (x + w / 2, -li * vgap)
+            if tb:
+                pos[key] = (u + w / 2, -li * main_step)
+                u += w + hgap
+            else:
+                pos[key] = (li * main_step, -(u + box_h / 2))
+                u += box_h + 0.55
             widths[key] = w
-            x += w + hgap
 
-    figw = min(max(7.5, maxw * 0.95), 16)
-    figh = max(2.2, len(layers) * vgap * 0.62 + (0.9 if title else 0.3))
+    nst = len(layers)
+    if tb:
+        figw = min(max(7.5, maxw * 0.95 + (2.4 if phases else 0)), 16)
+        figh = max(2.2, nst * main_step * 0.62 + (0.9 if title else 0.3))
+    else:
+        figw = min(max(7.5, nst * main_step * 1.0), 16)
+        figh = max(2.2, maxw * 0.9 + (0.9 if title else 0.3) + (0.9 if phases else 0))
     fig, ax = plt.subplots(figsize=(figw, figh))
-    box_h, ec, fc = 0.95, "#2F5597", "#EAF2FB"
     for key, (cx, cy) in pos.items():
         w = widths[key]
         ax.add_patch(mpatches.FancyBboxPatch(
@@ -199,10 +224,25 @@ def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9):
             color=ec, lw=1.1, shrinkA=26, shrinkB=26))
         if len(e) == 3:
             ax.text((x1 + x2) / 2 + 0.15, (y1 + y2) / 2, str(e[2]), fontsize=8, color=ec)
+    if phases:
+        for li, ph in enumerate(phases):
+            if ph is None:
+                continue
+            if tb:
+                ax.text(-maxw / 2 - 1.2, -li * main_step, str(ph), ha="right",
+                        va="center", fontsize=9, fontweight="bold", color=ec)
+            else:
+                ax.text(li * main_step, maxw / 2 + 1.0, str(ph), ha="center",
+                        fontsize=9, fontweight="bold", color=ec)
     if title:
         ax.set_title(title, fontsize=12)
-    ax.set_xlim(-maxw / 2 - 1, maxw / 2 + 1)
-    ax.set_ylim(-len(layers) * vgap, vgap * 0.8)
+    if tb:
+        ax.set_xlim(-maxw / 2 - (2.8 if phases else 1), maxw / 2 + 1)
+        ax.set_ylim(-nst * main_step, main_step * 0.4)
+    else:
+        half = max(widths.values()) / 2 + 0.8
+        ax.set_xlim(-half, (nst - 1) * main_step + half)
+        ax.set_ylim(-maxw / 2 - 1, maxw / 2 + (2.0 if phases else 1))
     ax.axis("off")
     return savefig(fig, name)
 '''

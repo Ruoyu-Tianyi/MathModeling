@@ -18,10 +18,12 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 ### P0 审题立项（Gate：产出《问题分析》）
 
 1. 读取赛题全文（用户给的文本 / PDF / 图片先转为文本）。
-2. **赛道判定（先做，决定后续工作流）**：
+2. **赛道判定（先做，决定后续工作流）**——按判定清单逐项核对并计分，写出证据：
    - **C 型（数据驱动）信号**：附带 Excel/CSV 数据附件；题目动词为"分析/预测/评价/识别/因素"；无物理机理约束；数据字段多、样本量大
    - **B 型（机理/优化）信号**：几何/物理/工程机理；微分方程、运筹优化、调度规划类；无数据附件或仅小表
-   - 判定结论与理由写入《问题分析》开头。C 型 → 全程按 `references/data-analysis-workflow.md` 执行（清洗→EDA→统计→建模）；B 型 → 按本文件通用流程 + `references/problem-types.md` 机理/优化路径。混合型逐问分流并在问题分析中说明。
+   - 逐问打分：每问统计 C 信号数 vs B 信号数，判定结论 = 多数信号方向 + 判定理由（列出命中的具体信号），写入《问题分析》开头。信号打平时按"数据附件有无"一票裁决。
+   - **判定后路由**：C 型 → `references/data-analysis-workflow.md`（流程纪律）+ `references/track-c-modeling.md`（方法深度），EDA 第一步跑 `scripts/eda.py` 自动生成探查报告；B 型 → 本文件通用流程 + `references/track-b-modeling.md`（机理/优化方法论，含无噪声验证、多解性、噪声地板等检验武器）。混合型逐问分流并在问题分析中说明。
+   - 用户在线时，判定结论与理由先给用户确认再进 P1；用户不在线按计分结果继续。
 3. 拆解为子问题 Q1…Qn，每问标注：题型（评价/预测/优化/机理/数据分析）、拟用模型候选、所需数据及来源。
 4. 查 `references/problem-types.md` 做题型→模型路由；确定整体技术路线，用 `code/plot_setup.py` 的 `flow()` 绘制技术路线图（放入问题分析）。
 5. 输出《问题分析》小节（赛道判定 + 每问：重述 + 思路 + 模型选择理由 + 数据计划 + 技术路线图）。若用户在线，简明确认后再进 P1；用户不在线则按最合理方案继续。
@@ -39,7 +41,7 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 
 - **深度推理门禁（R1/R4）**：每个模型建立后、写代码前，按 `references/deep-reasoning.md` 在 `analysis/derivations.md` 逐项完成**六检查**（量纲/退化/不变量/界/良态性/反例）并写证据；模型跑通后执行**红队对抗**（≥3 个对抗场景：退化输入、极端比例、边界样本、噪声注入、对抗构造），发现的问题写入论文"模型检验"或"误差分析"节。交卷前对照"分题型深化阶梯"，能上一级就上一级。
 - 每问独立脚本 `code/q1_*.py`、`code/q2_*.py`……从 `data/` 读数，结果图存 `figures/`（编号 fig1, fig2…），数值结果同时打印并写入 `results/`。
-- 图表规范：`from plot_setup import plt, savefig, paper_style`，出图统一 `paper_style()` 白底专业风格；机理示意图用 `draw_circle`/`mark_point`/`mark_angle`，技术路线图用 `flow()`。
+- 图表规范：`from plot_setup import plt, savefig, paper_style`，出图统一 `paper_style()` 白底专业风格；机理示意图用 `draw_circle`/`mark_point`/`mark_angle`，技术路线图/模型框架图/数据链路图用 `flow()`（支持 `orientation="lr"` 横向布局与 `phases=[...]` 阶段泳道标签）。
 - 每问必须包含**模型检验**（残差/拟合优度/收敛性/对比基线）和**灵敏度或稳健性分析**（至少一个关键参数扰动）。这是评奖硬指标，不可省略。灵敏度用 `scripts/sensitivity.py` 自动化：写一个返回指标的 `solve(x)` 包装函数，`sweep()` 自动 ±5%~20% 扫描，`report()` 出扰动曲线图 + 变化表（多参数用 `sweep_multi()` + `tornado()`），禁止手工改参数截图凑数。
 - 模型跑通一个就立刻进入 P3 写对应小节，写作与求解交错推进，不等全部跑完。
 - 代码风格：脚本顶部注释写明输入/输出/运行方式；随机过程固定 seed；单次运行 < 5 分钟。
@@ -80,6 +82,8 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 ## 资源索引
 
 - `references/problem-types.md` — 题型识别与模型选择路由表（评价/预测/优化/机理/数据分析）
+- `references/track-b-modeling.md` — B 赛道理工方法论（无噪声验证、多解性枚举、误差传播与噪声地板、退化检验、B 题灵敏度重点）
+- `references/track-c-modeling.md` — C 赛道数据方法论（评价/预测/统计/数据驱动优化的决策树与公式链、检验清单、论文写法）
 - `references/deep-reasoning.md` — 深度推理协议：推导稿制度、六检查、分题型深化阶梯、红队对抗清单
 - `references/math-writing.md` — 数学写作与公式深度规范（公式链条、双解法互验、解析讨论、段落三件套、摘要加粗规则）
 - `references/data-analysis-workflow.md` — C 型数据驱动赛题 playbook（清洗→EDA→统计→建模→决策，含常见坑与论文映射）
@@ -87,7 +91,8 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - `references/format-spec.md` — 国赛排版规范（字体字号、页边距、三线表、题注、摘要页）
 - `references/data-sources.md` — 数据库与公开数据源路由（Wind/Gildata/iFinD/World Bank/IMF/Yahoo/SEC 及取数口径）
 - `references/literature.md` — 文献调研流（scholar 检索 → 筛选 → gb7714.py 格式化 → 写入论文）
-- `scripts/scaffold.py` — 初始化比赛项目目录：论文模板 + data/SOURCES.md + code/plot_setup.py（绘图引导）
+- `scripts/scaffold.py` — 初始化比赛项目目录：论文模板 + data/SOURCES.md + code/plot_setup.py（绘图引导，flow() 支持横向/泳道流程图）
+- `scripts/eda.py` — C 赛道一键数据探查：读 Excel/CSV → 分布/相关/时序/分组四图 + 统计表 + 自动发现列表（eda-report.md）
 - `scripts/precheck.py` — 提交前自动检查（章节完整性、图表编号引用、图片存在性、摘要、占位符、查重自检、严谨性 WARN）
 - `scripts/sensitivity.py` — 灵敏度分析自动化：±5%~20% 参数扫描 + 扰动曲线图 + 变化表 + tornado 图
 - `scripts/gb7714.py` — GB/T 7714 参考文献格式化（单条 CLI / --json 批量）
