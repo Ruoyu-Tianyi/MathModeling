@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-click EDA report for C-track (data-driven) problems (V3).
+"""One-click EDA report for C-track (data-driven) problems (V3.1).
 
 Reads a contest attachment (Excel/CSV) and produces:
   - overview stats (shape, dtypes, missing, duplicates)
@@ -10,14 +10,27 @@ Reads a contest attachment (Excel/CSV) and produces:
   - outlier counts (IQR rule)
   - eda-report.md with tables + an auto-generated findings list
 
+Multi-sheet: an .xlsx with several sheets is fully traversed by default
+(one section per sheet, common-column "join key" hints across sheets).
+Use --sheet to analyse a single sheet.
+
+Compositional-data mode (化学组分 / 百分比配料类赛题):
+  --blank-as-zero       blanks mean "not detected" -> fill 0 (missing-value
+                        semantics are suppressed; high-missing findings off)
+  --row-sum-range LO,HI flag rows whose numeric-column sum falls outside
+                        [LO, HI] as invalid (e.g. --row-sum-range 85,105);
+                        invalid rows are listed in the report + findings.
+
 CLI:
     python scripts/eda.py data/raw/attachment1.xlsx
-    python scripts/eda.py data/raw/a.csv --out analysis/eda --time-col 日期 --group 品类
+    python scripts/eda.py data/raw/附件1.xlsx --blank-as-zero --row-sum-range 85,105
+    python scripts/eda.py data/raw/a.csv --out analysis/eda --time-col 日期
 
 The report's findings list is the starting point for the paper's
 "发现 1: ..." enumeration required by references/track-c-modeling.md.
 """
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -72,15 +85,23 @@ MAX_GROUP_LEVELS = 12
 
 
 # ---------------------------------------------------------------------------
-def read_table(path: Path, sheet=0) -> pd.DataFrame:
+def read_tables(path: Path, sheet=None):
+    """Return list of (table_name, DataFrame). xlsx -> all sheets by default."""
     if path.suffix.lower() in (".xlsx", ".xls"):
-        return pd.read_excel(path, sheet_name=sheet)
+        xl = pd.ExcelFile(path)
+        names = xl.sheet_names
+        if sheet is not None:
+            try:
+                names = [xl.sheet_names[int(sheet)]]
+            except (ValueError, IndexError):
+                names = [str(sheet)]
+        return [(n, xl.parse(n)) for n in names]
     for enc in ("utf-8", "gbk"):
         try:
-            return pd.read_csv(path, encoding=enc)
+            return [(path.stem, pd.read_csv(path, encoding=enc))]
         except UnicodeDecodeError:
             continue
-    return pd.read_csv(path, encoding="utf-8", errors="ignore")
+    return [(path.stem, pd.read_csv(path, encoding="utf-8", errors="ignore"))]
 
 
 def classify_columns(df: pd.DataFrame, time_col=None):
@@ -110,8 +131,17 @@ def iqr_outliers(s: pd.Series):
     return int(((s < lo) | (s > hi)).sum()), lo, hi
 
 
+def safe_name(s) -> str:
+    return re.sub(r"[^\w一-鿿-]+", "_", str(s)).strip("_") or "sheet"
+
+
+def is_id_col(c) -> bool:
+    """编号/序号/id 类列：不进图、不进统计、不进行和。"""
+    return bool(re.search(r"编号|序号|(^|_)id$", str(c), re.I))
+
+
 # ---------------------------------------------------------------------------
-def fig_distributions(df, num_cols, figdir):
+def fig_distributions(df, num_cols, figdir, prefix=""):
     cols = num_cols[:MAX_DIST_COLS]
     n = len(cols)
     ncols = 4 if n > 6 else (3 if n > 2 else n)
@@ -133,13 +163,13 @@ def fig_distributions(df, num_cols, figdir):
         axes[2 * r][k].axis("off")
         axes[2 * r + 1][k].axis("off")
     fig.tight_layout()
-    out = figdir / "eda_distributions.png"
+    out = figdir / f"{prefix}eda_distributions.png"
     fig.savefig(out, bbox_inches="tight", dpi=300)
     plt.close(fig)
     return out
 
 
-def fig_correlation(df, num_cols, figdir):
+def fig_correlation(df, num_cols, figdir, prefix=""):
     corr = df[num_cols].corr()
     n = len(num_cols)
     fig, ax = plt.subplots(figsize=(max(6, n * 0.55), max(5, n * 0.5)))
@@ -156,13 +186,13 @@ def fig_correlation(df, num_cols, figdir):
     fig.colorbar(im, shrink=0.8)
     ax.set_title("相关系数矩阵", fontsize=11)
     fig.tight_layout()
-    out = figdir / "eda_correlation.png"
+    out = figdir / f"{prefix}eda_correlation.png"
     fig.savefig(out, bbox_inches="tight", dpi=300)
     plt.close(fig)
     return out, corr
 
 
-def fig_timeseries(df, tcol, num_cols, figdir):
+def fig_timeseries(df, tcol, num_cols, figdir, prefix=""):
     cols = num_cols[:MAX_TS_COLS]
     d = df[[tcol] + cols].dropna(subset=[tcol]).sort_values(tcol)
     fig, axes = plt.subplots(len(cols), 1,
@@ -177,13 +207,13 @@ def fig_timeseries(df, tcol, num_cols, figdir):
         ax.set_title(str(c), fontsize=9)
         paper_style(ax)
     fig.tight_layout()
-    out = figdir / "eda_timeseries.png"
+    out = figdir / f"{prefix}eda_timeseries.png"
     fig.savefig(out, bbox_inches="tight", dpi=300)
     plt.close(fig)
     return out
 
 
-def fig_grouped(df, gcol, num_cols, figdir):
+def fig_grouped(df, gcol, num_cols, figdir, prefix=""):
     cols = num_cols[:4]
     top = df[gcol].value_counts().head(MAX_GROUP_LEVELS).index
     d = df[df[gcol].isin(top)]
@@ -197,51 +227,66 @@ def fig_grouped(df, gcol, num_cols, figdir):
         axes[0][i].tick_params(axis="x", rotation=45, labelsize=7)
         paper_style(axes[0][i])
     fig.tight_layout()
-    out = figdir / "eda_grouped.png"
+    out = figdir / f"{prefix}eda_grouped.png"
     fig.savefig(out, bbox_inches="tight", dpi=300)
     plt.close(fig)
     return out
 
 
 # ---------------------------------------------------------------------------
-def build_report(df, dt_cols, num_cols, cat_cols, corr, findings, figs,
-                 src: Path):
+def build_report(name, df, dt_cols, num_cols, cat_cols, feat_cols, corr,
+                 findings, figs, blank_as_zero, row_sum_range, invalid_rows):
     miss = df.isna().sum()
-    lines = ["# EDA 报告（自动生成）", "",
-             f"- 数据文件：`{src.name}`", f"- 规模：{df.shape[0]} 行 × {df.shape[1]} 列",
+    lines = [f"## 表 `{name}`", "",
+             f"- 规模：{df.shape[0]} 行 × {df.shape[1]} 列",
              f"- 数值列 {len(num_cols)} | 类别列 {len(cat_cols)} | 时间列 {len(dt_cols)}",
-             f"- 重复行：{int(df.duplicated().sum())}", "",
-             "## 缺失情况", "", "| 列 | 类型 | 缺失数 | 缺失率 |", "|---|---|---|---|"]
+             f"- 重复行：{int(df.duplicated().sum())}"]
+    if blank_as_zero:
+        lines.append("- 成分模式：空白按\"未检测到\"处理为 0")
+    if row_sum_range:
+        lo, hi = row_sum_range
+        lines.append(f"- 行和有效性区间 [{lo}, {hi}]：无效行 {len(invalid_rows)} 条")
+        if invalid_rows:
+            lines += ["", "### 无效行清单（行和越界）", "",
+                      "| 行号 | 标识 | 行和 |", "|---|---|---|"]
+            for idx, ident, s in invalid_rows:
+                lines.append(f"| {idx} | {ident} | {s:.2f} |")
+    lines += ["", "### 缺失情况", "", "| 列 | 类型 | 缺失数 | 缺失率 |", "|---|---|---|---|"]
+    any_miss = False
     for c in df.columns:
         m = miss[c]
         if m > 0:
+            any_miss = True
             kind = ("数值" if c in num_cols else "时间" if c in dt_cols else "类别")
             lines.append(f"| {c} | {kind} | {m} | {m / len(df):.1%} |")
-    if (miss == 0).all():
+    if not any_miss:
         lines.append("| （无缺失） | - | 0 | 0% |")
-    lines += ["", "## 数值列统计", "",
+    lines += ["", "### 数值列统计", "",
               "| 列 | 均值 | 标准差 | 最小 | 中位 | 最大 | 偏度 | IQR异常点数 |",
               "|---|---|---|---|---|---|---|---|"]
-    for c in num_cols:
+    for c in feat_cols:
         s = df[c].dropna()
         n_out, _, _ = iqr_outliers(s)
         lines.append(f"| {c} | {s.mean():.4g} | {s.std():.4g} | {s.min():.4g} "
                      f"| {s.median():.4g} | {s.max():.4g} | {s.skew():.2f} | {n_out} |")
-    lines += ["", "## 图清单", ""]
+    lines += ["", "### 图清单", ""]
     for f in figs:
         lines.append(f"- `{f.name}`")
-    lines += ["", "## 自动发现列表（人工复核后写入论文）", ""]
-    for i, f in enumerate(findings, 1):
-        lines.append(f"- 发现 {i}：{f}")
+    lines += ["", "### 自动发现列表（人工复核后写入论文）", ""]
+    for i, f_ in enumerate(findings, 1):
+        lines.append(f"- 发现 {i}：{f_}")
     lines.append("")
     return "\n".join(lines)
 
 
-def make_findings(df, num_cols, corr):
+def make_findings(df, feat_cols, corr, blank_as_zero, invalid_rows):
     f = []
-    miss = df.isna().mean()
-    for c in df.columns[(miss > MISS_HIGH)]:
-        f.append(f"列 `{c}` 缺失率 {miss[c]:.0%}（>{MISS_HIGH:.0%}），需在数据预处理节说明处理规则")
+    if invalid_rows:
+        f.append(f"{len(invalid_rows)} 行行和越出有效性区间，需在数据预处理节说明剔除规则")
+    if not blank_as_zero:
+        miss = df.isna().mean()
+        for c in df.columns[(miss > MISS_HIGH)]:
+            f.append(f"列 `{c}` 缺失率 {miss[c]:.0%}（>{MISS_HIGH:.0%}），需在数据预处理节说明处理规则")
     dup = int(df.duplicated().sum())
     if dup:
         f.append(f"存在 {dup} 条完全重复行，清洗时剔除并记录")
@@ -253,11 +298,18 @@ def make_findings(df, num_cols, corr):
                 if abs(r) > CORR_HIGH:
                     f.append(f"`{cols[i]}` 与 `{cols[j]}` 相关系数 {r:.2f}，"
                              f"存在共线性风险，建模前需剔除或合并其一（VIF 复核）")
-    for c in num_cols:
-        sk = df[c].dropna().skew()
+    for c in feat_cols:
+        s = df[c].dropna()
+        if blank_as_zero:
+            zs = float((s == 0).mean())
+            if zs > 0.5:
+                f.append(f"`{c}` 检出率低（{zs:.0%} 样本未检出），建模时考虑剔除或与其他成分合并")
+                continue  # 低检出列的偏度/异常点无统计意义，跳过
+        sk = s.skew()
         if abs(sk) > SKEW_HIGH:
             f.append(f"`{c}` 偏度 {sk:.2f}，明显偏态，考虑对数/Box-Cox 变换")
-    outs = {c: iqr_outliers(df[c].dropna())[0] for c in num_cols}
+    outs = {c: iqr_outliers(df[c].dropna())[0] for c in feat_cols
+            if not (blank_as_zero and (df[c].dropna() == 0).mean() > 0.5)}
     big = {c: n for c, n in outs.items() if n > len(df) * 0.02}
     for c, n in big.items():
         f.append(f"`{c}` IQR 异常点 {n} 个（占比 {n / len(df):.1%}），需业务判断剔除或截尾")
@@ -266,14 +318,31 @@ def make_findings(df, num_cols, corr):
     return f
 
 
+def check_row_sums(df, num_cols, row_sum_range):
+    lo, hi = row_sum_range
+    sums = df[num_cols].sum(axis=1, skipna=True)
+    bad = df.index[(sums < lo) | (sums > hi)]
+    id_col = next((c for c in df.columns if c not in num_cols), None)
+    out = []
+    for i in bad:
+        ident = df.loc[i, id_col] if id_col is not None else i
+        out.append((int(i), str(ident), float(sums[i])))
+    return out
+
+
 # ---------------------------------------------------------------------------
 def main() -> int:
     ap = argparse.ArgumentParser(description="C-track one-click EDA report")
     ap.add_argument("table", help="Excel/CSV file path")
     ap.add_argument("--out", default="analysis/eda", help="output directory")
-    ap.add_argument("--sheet", default=0, help="Excel sheet name/index")
+    ap.add_argument("--sheet", default=None,
+                    help="Excel sheet name/index (default: all sheets)")
     ap.add_argument("--time-col", default=None, help="datetime column name")
     ap.add_argument("--group", default=None, help="categorical group column")
+    ap.add_argument("--blank-as-zero", action="store_true",
+                    help="compositional mode: blanks mean 'not detected' -> 0")
+    ap.add_argument("--row-sum-range", default=None, metavar="LO,HI",
+                    help="validity range for numeric row sums, e.g. 85,105")
     args = ap.parse_args()
 
     src = Path(args.table)
@@ -284,42 +353,80 @@ def main() -> int:
     figdir = out_dir / "figures"
     figdir.mkdir(parents=True, exist_ok=True)
 
-    sheet = args.sheet
-    try:
-        sheet = int(sheet)
-    except (TypeError, ValueError):
-        pass
-    df = read_table(src, sheet)
-    dt_cols, num_cols, cat_cols = classify_columns(df, args.time_col)
+    rs_range = None
+    if args.row_sum_range:
+        lo_s, hi_s = args.row_sum_range.split(",")
+        rs_range = (float(lo_s), float(hi_s))
 
-    figs = []
-    if num_cols:
-        figs.append(fig_distributions(df, num_cols, figdir))
-    corr = None
-    if len(num_cols) >= 2:
-        f, corr = fig_correlation(df, num_cols, figdir)
-        figs.append(f)
-    tcol = args.time_col if args.time_col in dt_cols else (dt_cols[0] if dt_cols else None)
-    if tcol and num_cols:
-        figs.append(fig_timeseries(df, tcol, num_cols, figdir))
-    gcol = args.group
-    if not gcol:
-        low_card = [c for c in cat_cols if 2 <= df[c].nunique() <= MAX_GROUP_LEVELS]
-        gcol = low_card[0] if low_card else None
-    if gcol and num_cols:
-        figs.append(fig_grouped(df, gcol, num_cols, figdir))
+    tables = read_tables(src, args.sheet)
+    multi = len(tables) > 1
 
-    findings = make_findings(df, num_cols, corr)
-    report = build_report(df, dt_cols, num_cols, cat_cols, corr, findings, figs, src)
+    header = ["# EDA 报告（自动生成）", "",
+              f"- 数据文件：`{src.name}`（{len(tables)} 个表）", ""]
+    if multi:
+        header += ["## 多表单概览", "", "| 表 | 行 × 列 |", "|---|---|"]
+        for n, d in tables:
+            header.append(f"| {n} | {d.shape[0]} × {d.shape[1]} |")
+        pairs = []
+        for i in range(len(tables)):
+            for j in range(i + 1, len(tables)):
+                common = set(tables[i][1].columns) & set(tables[j][1].columns)
+                if common:
+                    pairs.append(f"{tables[i][0]} ∩ {tables[j][0]}："
+                                 + ", ".join(f"`{c}`" for c in sorted(common)))
+        if pairs:
+            header += ["", "- 表间共同列（疑似关联键）：" + "；".join(pairs),
+                       "- 注意：无共同列的表（如 基本信息表 vs 采样点成分表）通常靠编号前缀关联，需先做编号解析再 join", ""]
+
+    sections, total_figs, total_findings = [], 0, 0
+    for name, df in tables:
+        if args.blank_as_zero:
+            df = df.copy()
+        dt_cols, num_cols, cat_cols = classify_columns(df, args.time_col)
+        if args.blank_as_zero and num_cols:
+            df[num_cols] = df[num_cols].fillna(0.0)
+        feat_cols = [c for c in num_cols if not is_id_col(c)]
+
+        prefix = f"{safe_name(name)}_" if multi else ""
+        figs = []
+        if feat_cols:
+            figs.append(fig_distributions(df, feat_cols, figdir, prefix))
+        corr = None
+        if len(feat_cols) >= 2:
+            f, corr = fig_correlation(df, feat_cols, figdir, prefix)
+            figs.append(f)
+        tcol = (args.time_col if args.time_col in dt_cols
+                else (dt_cols[0] if dt_cols else None))
+        if tcol and feat_cols:
+            figs.append(fig_timeseries(df, tcol, feat_cols, figdir, prefix))
+        gcol = args.group
+        if not gcol:
+            low_card = [c for c in cat_cols
+                        if 2 <= df[c].nunique() <= MAX_GROUP_LEVELS]
+            gcol = low_card[0] if low_card else None
+        if gcol and feat_cols:
+            figs.append(fig_grouped(df, gcol, feat_cols, figdir, prefix))
+
+        invalid = (check_row_sums(df, feat_cols, rs_range)
+                   if rs_range and len(feat_cols) >= 2 else [])
+        findings = make_findings(df, feat_cols, corr, args.blank_as_zero, invalid)
+        sections.append(build_report(name, df, dt_cols, num_cols, cat_cols,
+                                     feat_cols, corr, findings, figs,
+                                     args.blank_as_zero,
+                                     rs_range if len(feat_cols) >= 2 else None,
+                                     invalid))
+        total_figs += len(figs)
+        total_findings += len(findings)
+        print(f"[{name}] rows={df.shape[0]} cols={df.shape[1]} "
+              f"numeric={len(num_cols)} cat={len(cat_cols)} time={len(dt_cols)}"
+              + (f" invalid_rows={len(invalid)}" if rs_range else ""))
+
     rpt = out_dir / "eda-report.md"
-    rpt.write_text(report, encoding="utf-8")
-
-    print(f"rows={df.shape[0]} cols={df.shape[1]} "
-          f"numeric={len(num_cols)} cat={len(cat_cols)} time={len(dt_cols)}")
-    for f in figs:
+    rpt.write_text("\n".join(header + sections), encoding="utf-8")
+    for f in sorted(figdir.glob("*.png")):
         print("fig saved:", f)
     print("report:", rpt)
-    print("findings:", len(findings))
+    print("findings:", total_findings)
     return 0
 
 

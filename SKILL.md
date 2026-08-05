@@ -92,7 +92,7 @@ P0 审题立项 → P1 数据获取 → P2 建模求解 → P3 论文写作 → 
 - `references/data-sources.md` — 数据库与公开数据源路由（Wind/Gildata/iFinD/World Bank/IMF/Yahoo/SEC 及取数口径）
 - `references/literature.md` — 文献调研流（scholar 检索 → 筛选 → gb7714.py 格式化 → 写入论文）
 - `scripts/scaffold.py` — 初始化比赛项目目录：论文模板 + data/SOURCES.md + code/plot_setup.py（绘图引导，flow() 支持横向/泳道流程图）
-- `scripts/eda.py` — C 赛道一键数据探查：读 Excel/CSV → 分布/相关/时序/分组四图 + 统计表 + 自动发现列表（eda-report.md）
+- `scripts/eda.py` — C 赛道一键数据探查：读 Excel/CSV（xlsx 自动遍历多 sheet + 表间关联键提示）→ 分布/相关/时序/分组四图 + 统计表 + 自动发现列表；成分数据模式 `--blank-as-zero` + 行和有效性 `--row-sum-range`
 - `scripts/precheck.py` — 提交前自动检查（章节完整性、图表编号引用、图片存在性、摘要、占位符、查重自检、严谨性 WARN）
 - `scripts/sensitivity.py` — 灵敏度分析自动化：±5%~20% 参数扫描 + 扰动曲线图 + 变化表 + tornado 图
 - `scripts/gb7714.py` — GB/T 7714 参考文献格式化（单条 CLI / --json 批量）
