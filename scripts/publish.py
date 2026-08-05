@@ -65,9 +65,18 @@ def main() -> int:
             if r.returncode == 0 and pdf.is_file():
                 print(f"      PDF OK: {pdf}")
             else:
-                print("      PDF skipped (Word COM failed)")
+                err = (r.stderr or r.stdout or "").strip().splitlines()
+                print(f"      PDF failed: {err[0][:160] if err else 'unknown COM error'}")
+                print("      retrying once ...")
+                r = run([POWERSHELL, "-NoProfile", "-Command", cmd],
+                        capture_output=True, text=True, timeout=300)
+                if r.returncode == 0 and pdf.is_file():
+                    print(f"      PDF OK (retry): {pdf}")
+                else:
+                    print("      PDF skipped. 自查: ① Word 能否手动打开该 docx "
+                          "② 是否有弹窗/保护视图 ③ 手动导出验证")
         except Exception as e:
-            print(f"      PDF skipped ({type(e).__name__})")
+            print(f"      PDF skipped ({type(e).__name__}: {e})")
     else:
         print("[3/4] pdf export skipped (no PowerShell/Word)")
 

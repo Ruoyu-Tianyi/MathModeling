@@ -1,4 +1,4 @@
-# MatgModeling Skill（V2）
+# MathModeling Skill（V3.5）
 
 **把赛题交给Agent → 输出可直接提交、可继续编辑的建模论文（Word）**（含模型推导、可运行代码、规范图表、摘要与参考文献）。适用于国赛（CUMCM）、美赛（MCM/ICM）及同类赛事，面向 所有支持 SKILL.md 规范的 AI Agent 运行。
 
@@ -34,6 +34,7 @@
 │   ├── precheck.py               # 论文提交前自动检查（含查重自检）
 │   ├── sensitivity.py            # 灵敏度分析自动化
 │   ├── gb7714.py                 # GB/T 7714 参考文献格式化
+│   ├── stats_utils.py            # 零 scipy 统计兜底库（p 值/聚类/CLR，scaffold 自动分发）
 │   ├── build_docx.py             # paper.md → 国赛规范 Word
 │   └── publish.py                # 一键出片（precheck → docx → PDF）
 └── assets/
@@ -123,7 +124,19 @@ python scripts/build_docx.py paper/paper.md
 
 ## 更新日志
 
-> 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v3.1.0）。
+> 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v3.5.0）。
+
+### V3.5（2026-08-05，C 题回测复盘加固）
+
+源自 2022 C 题（古代玻璃）全流程回测的九项观察（O1~O9）复盘，分工具 / 方法论 / 质检三层修复：
+
+- **A1 `stats_utils.py` 收编进 skill**：零 scipy 统计兜底库（chi2/t/F 分布生存函数与 p 值、KMeans、CLR 变换等 330 行，数值校验 chi2_sf(3.841,1)=0.05、KMeans ARI=1.0）；`scaffold.py` 自动分发到 `code/`，C 题环境无 scipy 不再手写兜底
+- **A2 运行环境探针 + 降级映射表**：`track-c-modeling.md` 新增探针代码与降级映射（sklearn RF → 决策桩/质心、scipy.stats → stats_utils、缺失库逐一给出替代路线），建模前先探明环境
+- **B precheck 三项误报修复**：薄小节判定改按字符量（<120 散文 chars，排除表格/图/公式行）；关键词只按分号/逗号切分（不再把空格当分隔符误报）；摘要上限 600→800 字符。回测论文 WARN 从 8 条降到 3 条（误报清零，保留真实提示）
+- **B publish 错误透明化**：Word COM 出片失败时打印 stderr 首行 + 自动重试一次 + 自查提示，不再静默
+- **C1 EDA 跑两次**：workflow 阶段 2 明确 raw 一次（摸清底数）+ clean/join 后一次（正式分析基准）
+- **C2 小簇纪律**：聚类簇 n<5 不作正式亚类结论，只作提示
+- **C3 画像图纪律**：只画关键成分（贡献度排序前几项），拒绝全成分蜘蛛网图
 
 ### V3.1（2026-08-05，xlsx 实战接入增强）
 

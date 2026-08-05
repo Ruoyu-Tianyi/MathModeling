@@ -278,6 +278,14 @@ def main() -> int:
     (root / "code" / "plot_setup.py").write_text(PLOT_SETUP, encoding="utf-8")
     (root / "analysis" / "derivations.md").write_text(DERIVATIONS_MD, encoding="utf-8")
 
+    # stats_utils.py：随 skill 发布的统计/ML 工具库（无 scipy/sklearn 环境自实现）
+    su = Path(__file__).resolve().parent / "stats_utils.py"
+    if su.is_file():
+        shutil.copy(su, root / "code" / "stats_utils.py")
+        print("  - code/stats_utils.py (statistics/ML toolbox)")
+    else:
+        print("  - WARN: stats_utils.py not found next to scaffold.py, skipped")
+
     print(f"OK: project created at {root}")
     for d in DIRS:
         print(f"  - {d}/")
