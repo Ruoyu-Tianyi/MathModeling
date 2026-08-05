@@ -17,6 +17,12 @@
   ari(labels1, labels2)
   cart_gini(X, y, max_depth, min_leaf) -> 规则列表 + predict 函数
   f_ratios(X, y) -> 单变量类间/类内方差比（特征重要性旁证）
+贝叶斯与软聚类（V3.6）：
+  t_ppf(alpha_two_sided, df) -> t 临界值（bisection 反解 t_sf）
+  bayes_linreg(X, y, prior) -> 后验 dict（NIG 共轭闭式解）
+  bayes_predict(post, Xnew, level) -> 均值 + 可信区间（t 预测分布）
+  gmm(X, k, seed, n_init, cov_type) -> labels, proba, ...（EM，full/diag 协方差）
+  gmm_select(X, ks, seed) -> BIC 选簇数 {k: (bic, loglik)}
 """
 import math
 
@@ -337,3 +343,148 @@ def f_ratios(X, y):
                      for c in np.unique(y))
         out.append(between / within if within > 0 else np.inf)
     return np.array(out)
+
+
+# ---------------------------------------------------------------- 贝叶斯回归
+def t_ppf(alpha_two_sided, df):
+    """双侧 alpha 的 t 临界值：求 t 使 P(|T|>t) = alpha（bisection 反解 t_sf）。"""
+    lo, hi = 0.0, 1.0
+    while t_sf(hi, df) > alpha_two_sided:
+        hi *= 2
+        if hi > 1e6:
+            break
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if t_sf(mid, df) > alpha_two_sided:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def bayes_linreg(X, y, prior=None):
+    """共轭贝叶斯线性回归（Normal-Inverse-Gamma，闭式解）。
+
+    模型 y = Xβ + ε, ε ~ N(0, σ²)；先验 β|σ² ~ N(m0, σ²V0)，σ² ~ InvGamma(a0, b0)。
+    默认弱信息先验（V0=1e6·I，a0=b0=1e-3）→ 后验均值≈OLS，区间含贝叶斯修正。
+    prior 可传 dict(m0=, V0=, a0=, b0=) 覆盖；X 需自行加截距列。
+    返回 dict(mn, Vn, an, bn)：β|y ~ t_{2an}(mn, bn/an·Vn)。
+    """
+    X, y = np.asarray(X, float), np.asarray(y, float)
+    d = X.shape[1]
+    pr = {"m0": np.zeros(d), "V0": np.eye(d) * 1e6, "a0": 1e-3, "b0": 1e-3}
+    if prior:
+        pr.update(prior)
+    m0, V0, a0, b0 = (np.asarray(pr["m0"], float), np.asarray(pr["V0"], float),
+                      pr["a0"], pr["b0"])
+    V0i = np.linalg.inv(V0)
+    Vn = np.linalg.inv(V0i + X.T @ X)
+    mn = Vn @ (V0i @ m0 + X.T @ y)
+    an = a0 + len(y) / 2
+    bn = b0 + 0.5 * (y @ y - mn @ np.linalg.inv(Vn) @ mn + m0 @ V0i @ m0)
+    return {"mn": mn, "Vn": Vn, "an": an, "bn": bn}
+
+
+def bayes_predict(post, Xnew, level=0.95):
+    """后验预测：返回 (mean, lo, hi)。预测分布为 t_{2an}(x'mn, s²)，s² = bn/an·(1 + x'Vn x)。"""
+    Xnew = np.atleast_2d(np.asarray(Xnew, float))
+    mn, Vn, an, bn = post["mn"], post["Vn"], post["an"], post["bn"]
+    mean = Xnew @ mn
+    s2 = bn / an * (1 + np.einsum("ij,jk,ik->i", Xnew, Vn, Xnew))
+    tcrit = t_ppf(1 - level, 2 * an)
+    half = tcrit * np.sqrt(s2)
+    return mean, mean - half, mean + half
+
+
+# ---------------------------------------------------------------- GMM 软聚类
+def _gauss_logpdf(X, mean, cov, reg):
+    d = X.shape[1]
+    cov_r = cov + np.eye(d) * reg
+    sign, logdet = np.linalg.slogdet(cov_r)
+    if sign <= 0:  # 协方差退化，加大正则
+        cov_r = cov + np.eye(d) * reg * 100
+        sign, logdet = np.linalg.slogdet(cov_r)
+    sol = np.linalg.solve(cov_r, (X - mean).T).T
+    maha = ((X - mean) * sol).sum(1)
+    return -0.5 * (d * math.log(2 * math.pi) + logdet + maha)
+
+
+def gmm(X, k, seed=0, n_init=5, max_iter=200, reg=1e-6, tol=1e-6,
+        cov_type="full"):
+    """高斯混合模型（EM）。k-means 初始化，多次重启取最优。
+
+    cov_type: "full" 全协方差（需 n >> k·d²/2，否则过参数化）；
+              "diag" 对角协方差（小样本纪律：n 有限时的默认稳妥选择）。
+    返回 (labels, proba, weights, means, covs, loglik)：
+      proba (n,k) 后验归属概率——max(proba)<0.7 的样本即"过渡样本"。
+    """
+    X = np.asarray(X, float)
+    n, d = X.shape
+    diag = cov_type == "diag"
+    best = None
+    for init in range(n_init):
+        km_lab, C0, _ = kmeans(X, k, seed=seed * 100 + init)
+        means = C0.copy()
+        covs = np.array([np.cov(X[km_lab == i].T) if (km_lab == i).sum() > 1
+                         else np.eye(d) * X.var(0).mean() for i in range(k)])
+        if diag:
+            covs = np.array([np.diag(np.maximum(np.diag(c), 1e-9)) for c in covs])
+        w = np.array([(km_lab == i).mean() for i in range(k)])
+        w = np.maximum(w, 1e-6)
+        w /= w.sum()
+        ll_old = -np.inf
+        for _ in range(max_iter):
+            # E
+            logp = np.column_stack([
+                _gauss_logpdf(X, means[i], covs[i], reg) + math.log(w[i])
+                for i in range(k)])
+            logp -= logp.max(1, keepdims=True)
+            proba = np.exp(logp)
+            proba /= proba.sum(1, keepdims=True)
+            # 标准对数似然（log-sum-exp）
+            comp = np.column_stack([
+                _gauss_logpdf(X, means[i], covs[i], reg) for i in range(k)])
+            lw = comp + np.log(np.maximum(w, EPS))
+            mx = lw.max(1, keepdims=True)
+            ll = float((mx[:, 0] + np.log(np.exp(lw - mx).sum(1))).sum())
+            # M
+            Nk = proba.sum(0)
+            empty = Nk < 1e-8
+            if empty.any():  # 空簇重置到最不适配的样本
+                worst = proba.max(1).argmin()
+                for i in np.where(empty)[0]:
+                    means[i] = X[worst]
+                    covs[i] = np.eye(d) * X.var(0).mean()
+                    if diag:
+                        covs[i] = np.diag(np.full(d, X.var(0).mean()))
+                    Nk[i] = 1.0
+                    proba[worst] = 0
+                    proba[worst, i] = 1.0
+            w = Nk / n
+            means = (proba.T @ X) / Nk[:, None]
+            for i in range(k):
+                dev = X - means[i]
+                covs[i] = (dev * proba[:, i:i + 1]).T @ dev / Nk[i]
+                if diag:
+                    covs[i] = np.diag(np.maximum(np.diag(covs[i]), 1e-9))
+            if abs(ll - ll_old) < tol * (1 + abs(ll)):
+                break
+            ll_old = ll
+        labels = proba.argmax(1)
+        if best is None or ll > best[-1]:
+            best = (labels, proba, w, means, covs, ll)
+    return best
+
+
+def gmm_select(X, ks, seed=0, n_init=5, cov_type="full"):
+    """BIC 选簇数：返回 {k: (bic, loglik)}，BIC 越小越好。"""
+    X = np.asarray(X, float)
+    n, d = X.shape
+    out = {}
+    for k in ks:
+        _, _, _, _, _, ll = gmm(X, k, seed=seed, n_init=n_init,
+                                cov_type=cov_type)
+        pcov = d if cov_type == "diag" else d * (d + 1) / 2
+        p = k * (d + pcov) + (k - 1)  # 均值+协方差+权重
+        out[k] = (-2 * ll + p * math.log(n), ll)
+    return out
