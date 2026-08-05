@@ -81,12 +81,44 @@ setup_plot()
 FIGDIR = Path(__file__).resolve().parent.parent / "figures"
 FIGDIR.mkdir(exist_ok=True)
 
+# V3.7 图题纪律：论文用图不带图内标题——题注以文本形式写在 md 图片行
+# 下一行（"图 N: 标题"，编号全文连续），由 Word 样式统一字号。
+# savefig 自动剥离 suptitle / ax.set_title 并提醒；子图只允许 (a)/(b)
+# 式面板小标签，用 panel_tag() 添加（豁免剥离）。
+
+
+def _strip_titles(fig, name):
+    """剥离图内标题（V3.7 纪律），panel_tag 标记的面板标签豁免。"""
+    removed = []
+    if getattr(fig, "_suptitle", None) is not None and fig._suptitle.get_text():
+        removed.append(fig._suptitle.get_text())
+        fig.suptitle("")
+    for ax in fig.axes:
+        if getattr(ax, "_v37_panel_tag", False):
+            continue
+        t = ax.get_title()
+        if t:
+            removed.append(t)
+            ax.set_title("")
+    if removed:
+        print(f"[V3.7] {name}: 图内标题已移除 {removed} —— "
+              f"请在 md 中补 '图 N: <标题>' 题注行")
+    return removed
+
 
 def savefig(fig, name, dpi=300):
+    _strip_titles(fig, name)
     out = FIGDIR / name
     fig.savefig(out, bbox_inches="tight", dpi=dpi)
     print("fig saved:", out)
     return out
+
+
+def panel_tag(ax, tag, loc="upper left", fontsize=10):
+    """子图面板小标签 '(a)'/'(b)' —— 图内唯一允许的文字标识。"""
+    ax.set_title(tag, fontsize=fontsize, loc=loc, fontweight="bold")
+    ax._v37_panel_tag = True  # 标记为面板标签，_strip_titles 豁免
+    return ax
 
 
 def paper_style(ax=None, grid=True):
@@ -164,8 +196,10 @@ def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9,
     Example:
         flow([[("a", "读取数据")], [("b", "清洗"), ("c", "EDA")], [("d", "建模")]],
              [("a", "b"), ("a", "c"), ("b", "d"), ("c", "d")],
-             "fig_flow.png", title="技术路线图",
+             "fig_flow.png",
              phases=["数据", "预处理", "建模"])
+        # V3.7 起 title 参数废弃：图题不写进图内，在 md 图片行下一行
+        # 写 "图 N: 技术路线图" 题注。
     """
     import matplotlib.patches as mpatches
 
@@ -203,12 +237,16 @@ def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9,
             widths[key] = w
 
     nst = len(layers)
+    if title:
+        # V3.7：title 参数已废弃（图题改走 md 题注行），不再渲染也不占版面
+        print(f"[V3.7] flow(): title={title!r} 已忽略 —— 请在 md 中补 '图 N: {title}' 题注行")
+        title = None
     if tb:
         figw = min(max(7.5, maxw * 0.95 + (2.4 if phases else 0)), 16)
-        figh = max(2.2, nst * main_step * 0.62 + (0.9 if title else 0.3))
+        figh = max(2.2, nst * main_step * 0.62 + 0.3)
     else:
         figw = min(max(7.5, nst * main_step * 1.0), 16)
-        figh = max(2.2, maxw * 0.9 + (0.9 if title else 0.3) + (0.9 if phases else 0))
+        figh = max(2.2, maxw * 0.9 + 0.3 + (0.9 if phases else 0))
     fig, ax = plt.subplots(figsize=(figw, figh))
     for key, (cx, cy) in pos.items():
         w = widths[key]
@@ -234,8 +272,6 @@ def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9,
             else:
                 ax.text(li * main_step, maxw / 2 + 1.0, str(ph), ha="center",
                         fontsize=9, fontweight="bold", color=ec)
-    if title:
-        ax.set_title(title, fontsize=12)
     if tb:
         ax.set_xlim(-maxw / 2 - (2.8 if phases else 1), maxw / 2 + 1)
         ax.set_ylim(-nst * main_step, main_step * 0.4)

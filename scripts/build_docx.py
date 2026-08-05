@@ -453,6 +453,14 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p.add_run().add_picture(str(img_path), width=Cm(width_cm))
+            # 图与"图 N"题注绑定：向后（跳过空行，最多 3 行）找到图题时
+            # keep_with_next，图 + 题注同页或整体另起一页（V3.7）
+            for lj in range(i + 1, min(i + 4, len(lines))):
+                if lines[lj].strip():
+                    if (CAPTION_RE.match(lines[lj].strip())
+                            and lines[lj].strip().startswith("图")):
+                        p.paragraph_format.keep_with_next = True
+                    break
             i += 1; continue
         if line.strip().startswith("|"):
             rows = []

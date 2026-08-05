@@ -100,6 +100,35 @@ def check(path: Path, lang: str, problem_dir: Path = None):
     for n in sorted(tabs_caps - tabs_refs, key=int):
         warns.append(f"table 表{n} has caption but no in-text reference")
 
+    # --- figure caption discipline (V3.7) -------------------------------------
+    # every image must be followed by a "图 N: ..." caption on the next
+    # non-empty line; caption numbers must run 1..n without gaps/dups
+    lines = text.splitlines()
+    n_imgs = 0
+    for li, line in enumerate(lines):
+        if not IMG_MD_RE.search(line):
+            continue
+        n_imgs += 1
+        nxt = ""
+        for lj in range(li + 1, min(li + 4, len(lines))):
+            if lines[lj].strip():
+                nxt = lines[lj].strip()
+                break
+        if not FIG_CAPTION_RE.match(nxt):
+            warns.append(f"figure without 图 N caption (line {li + 1}): "
+                         f"{line.strip()[:40]}")
+    for kind, cre in (("图", FIG_CAPTION_RE), ("表", TAB_CAPTION_RE)):
+        seq = [int(m.group(1)) for m in cre.finditer(text)]
+        if not seq:
+            continue
+        dups = sorted({n for n in seq if seq.count(n) > 1})
+        if dups:
+            warns.append(f"{kind} caption numbers duplicated: {dups}")
+        expect = list(range(1, max(seq) + 1))
+        missing = sorted(set(expect) - set(seq))
+        if missing:
+            warns.append(f"{kind} caption numbers not continuous, missing: {missing}")
+
     # abstract sanity: length + contains digits (concrete results)
     abs_m = re.search(r"摘要\s*\n+(.*?)\n\s*\*\*关键词", text, re.S)
     if abs_m:
