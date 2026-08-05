@@ -211,8 +211,15 @@ def add_table(doc, rows):
     """3-line table per 优秀作品 spec: 1.5pt top/bottom rules, 0.5pt header
     rule; first column narrow+centered, others left-aligned; cells
     vertically centered with 0.2 cm side margins; borders drawn directly
-    (table-style tblLook is unreliable)."""
+    (table-style tblLook is unreliable).
+
+    Pagination: every row gets cantSplit (a row never breaks across pages);
+    tables with ≤30 rows additionally get keepNext on all rows but the last,
+    so the whole table moves to the next page as one block instead of being
+    split (user rule: 宁可另起一页). Very long tables (>30 rows, e.g. appendix
+    data) are allowed to flow across pages, but still only between rows."""
     from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_TABLE_ALIGNMENT
+    KEEP_TOGETHER_MAX_ROWS = 30
     n_rows, n_cols = len(rows), len(rows[0])
     t = doc.add_table(rows=n_rows, cols=n_cols)
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -223,6 +230,10 @@ def add_table(doc, rows):
     widths = [first_w] + [other_w] * (n_cols - 1)
     set_table_cell_margins(t)
     for i, row in enumerate(rows):
+        # 行不跨页
+        tr_pr = t.rows[i]._tr.get_or_add_trPr()
+        cant = OxmlElement("w:cantSplit")
+        tr_pr.append(cant)
         for j, cell_text in enumerate(row):
             cell = t.cell(i, j)
             cell.width = Cm(widths[j])
@@ -231,6 +242,10 @@ def add_table(doc, rows):
             p = cell.paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER if j == 0 else WD_ALIGN_PARAGRAPH.LEFT
             add_runs(p, cell_text, base_size=10.5)
+            if n_rows <= KEEP_TOGETHER_MAX_ROWS and i < n_rows - 1:
+                # 整表不跨页：除末行外所有段落 keepNext，与下一行绑定
+                for cp in cell.paragraphs:
+                    cp.paragraph_format.keep_with_next = True
             for r in p.runs:
                 if r.font.size is None:
                     r.font.size = Pt(10.5)
@@ -457,6 +472,9 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
                 p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             add_runs(p, cap, base_size=10.5)
+            if cap.startswith("表"):
+                # 表题与表体绑定：题注随表一起另起一页，不留在上一页页尾
+                p.paragraph_format.keep_with_next = True
             i += 1; continue
         m = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", line)
         if m:

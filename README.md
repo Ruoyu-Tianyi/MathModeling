@@ -1,4 +1,4 @@
-# MathModeling Skill（V3.6）
+# MathModeling Skill（V3.6.1）
 
 **把赛题交给Agent → 输出可直接提交、可继续编辑的建模论文（Word）**（含模型推导、可运行代码、规范图表、摘要与参考文献）。适用于国赛（CUMCM）、美赛（MCM/ICM）及同类赛事，面向 所有支持 SKILL.md 规范的 AI Agent 运行。
 
@@ -124,7 +124,13 @@ python scripts/build_docx.py paper/paper.md
 
 ## 更新日志
 
-> 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v3.6.0）。
+> 规则：同一轮迭代合并为一条；跨天或大版本才新增条目；倒序排列。细粒度历史见 git tag（v1.0.0 ~ v3.6.1）。
+
+### V3.6.1（2026-08-05，表格分页规则）
+
+- **表格不跨页**：`build_docx.py` 三线表全部加行级 `cantSplit`（行不拦腰断）；≤30 行的表整表 `keepNext` 绑定——本页放不下时整体另起一页，不在两页间断开；>30 行附录长表允许按行界跨页
+- **表题与表体绑定**："表 N" 题注 `keep_with_next`，不再单独滞留上一页页尾
+- 已写入 `references/format-spec.md` 排版规范；回测论文重生成验证：39 行 cantSplit、130 处 keepNext 全部注入
 
 ### V3.6（2026-08-05，贝叶斯与软聚类：C 赛道"深刻档"补全）
 
