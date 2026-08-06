@@ -85,6 +85,10 @@ FIGDIR.mkdir(exist_ok=True)
 # 下一行（"图 N: 标题"，编号全文连续），由 Word 样式统一字号。
 # savefig 自动剥离 suptitle / ax.set_title 并提醒；子图只允许 (a)/(b)
 # 式面板小标签，用 panel_tag() 添加（豁免剥离）。
+#
+# V3.7.1 字号纪律：图插进 Word 会等比缩小，图内文字跟着缩水。
+# savefig(insert_cm=...) 按"目标插入宽度"反向放大图内字号，使插入
+# Word 缩放后图内文字 ≈10 pt（五号）；图背景默认透明（无边框、无填充色）。
 
 
 def _strip_titles(fig, name):
@@ -106,10 +110,44 @@ def _strip_titles(fig, name):
     return removed
 
 
-def savefig(fig, name, dpi=300):
+def _boost_fonts(fig, insert_cm, target_pt=10.0):
+    """按插入宽度反向放大图内字号：fig 越宽、插入越窄，放大越多。
+
+    目标：PNG 插入 Word 缩到 insert_cm 宽后，基准文字 ≈ target_pt。
+    缩放比 scale = insert_cm / fig_width_cm；所有文字乘 1/scale，
+    再乘 target_pt/10（rcParams 基准 10 pt）。
+    """
+    fig_w_cm = fig.get_size_inches()[0] * 2.54
+    scale = insert_cm / max(fig_w_cm, 1e-6)
+    boost = (1.0 / scale) * (target_pt / 10.0) if scale < 0.999 else (target_pt / 10.0)
+    if abs(boost - 1.0) < 0.02:
+        return
+    for ax in fig.axes:
+        items = ([ax.title, ax.xaxis.label, ax.yaxis.label]
+                 + list(ax.get_xticklabels()) + list(ax.get_yticklabels())
+                 + list(ax.texts))
+        leg = ax.get_legend()
+        if leg is not None:
+            items += list(leg.get_texts())
+        for t in items:
+            t.set_fontsize(t.get_fontsize() * boost)
+
+
+def savefig(fig, name, dpi=300, insert_cm=12.0, transparent=True):
+    """保存论文用图。
+
+    insert_cm: 该图在 md 中指定的插入宽度（{w=14cm} → insert_cm=14），
+               用于字号反缩放；未指定时按默认档 12 cm 估算。
+    transparent: 图背景透明（无边框、无填充色，V3.7.1 默认）。
+    """
     _strip_titles(fig, name)
+    _boost_fonts(fig, insert_cm)
+    if transparent:
+        fig.patch.set_alpha(0.0)
+        for ax in fig.axes:
+            ax.patch.set_alpha(0.0)
     out = FIGDIR / name
-    fig.savefig(out, bbox_inches="tight", dpi=dpi)
+    fig.savefig(out, bbox_inches="tight", dpi=dpi, transparent=transparent)
     print("fig saved:", out)
     return out
 
@@ -138,7 +176,7 @@ def paper_style(ax=None, grid=True):
     if grid:
         ax.grid(True, color="#DDDDDD", lw=0.6, alpha=0.8)
         ax.set_axisbelow(True)
-    ax.tick_params(colors="#333333", labelsize=9)
+    ax.tick_params(colors="#333333", labelsize=10)  # 基准 10pt（savefig 反缩放后即终稿字号）
     return ax
 
 
@@ -183,7 +221,7 @@ def mark_angle(ax, vertex, p1, p2, label=None, radius=None, color="#2F5597",
 
 
 def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9,
-         orientation="tb", phases=None):
+         orientation="tb", phases=None, insert_cm=12.0):
     """Flowchart for 技术路线图 / 模型框架图 / 数据链路图.
 
     layers: [[(key, label), ...], ...]  # each inner list is one stage
@@ -280,7 +318,7 @@ def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9,
         ax.set_xlim(-half, (nst - 1) * main_step + half)
         ax.set_ylim(-maxw / 2 - 1, maxw / 2 + (2.0 if phases else 1))
     ax.axis("off")
-    return savefig(fig, name)
+    return savefig(fig, name, insert_cm=insert_cm)
 '''
 
 SOURCES_MD = """# 数据来源记录 (Data Sources)

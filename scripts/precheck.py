@@ -128,6 +128,11 @@ def check(path: Path, lang: str, problem_dir: Path = None):
         missing = sorted(set(expect) - set(seq))
         if missing:
             warns.append(f"{kind} caption numbers not continuous, missing: {missing}")
+    # 独立成行的 "表 N 标题"（无冒号）不会被识别为题注——样式与分页绑定都失效
+    for li, line in enumerate(lines):
+        if re.match(r"^(图|表)\s*\d+\s+\S", line.strip()):
+            warns.append(f"caption missing colon (line {li + 1}): "
+                         f"'{line.strip()[:30]}' —— 用 '图/表 N: 标题' 形式")
 
     # abstract sanity: length + contains digits (concrete results)
     abs_m = re.search(r"摘要\s*\n+(.*?)\n\s*\*\*关键词", text, re.S)
