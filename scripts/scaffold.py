@@ -116,10 +116,18 @@ def _boost_fonts(fig, insert_cm, target_pt=10.0):
     目标：PNG 插入 Word 缩到 insert_cm 宽后，基准文字 ≈ target_pt。
     缩放比 scale = insert_cm / fig_width_cm；所有文字乘 1/scale，
     再乘 target_pt/10（rcParams 基准 10 pt）。
+
+    V3.9 防重叠：
+    - boost 封顶 1.5 —— 本函数只放大字形不改布局，过度放大必然重叠；
+    - boost>1.15 且 x 刻度 ≥6 个时旋转刻度 40°，避免相邻刻度相撞；
+    - flow() 等自缩放图（fig._v37_no_boost）跳过，禁止二次放大。
     """
+    if getattr(fig, "_v37_no_boost", False):
+        return
     fig_w_cm = fig.get_size_inches()[0] * 2.54
     scale = insert_cm / max(fig_w_cm, 1e-6)
     boost = (1.0 / scale) * (target_pt / 10.0) if scale < 0.999 else (target_pt / 10.0)
+    boost = min(boost, 1.5)
     if abs(boost - 1.0) < 0.02:
         return
     for ax in fig.axes:
@@ -131,6 +139,11 @@ def _boost_fonts(fig, insert_cm, target_pt=10.0):
             items += list(leg.get_texts())
         for t in items:
             t.set_fontsize(t.get_fontsize() * boost)
+        xt = ax.get_xticklabels()
+        if boost > 1.15 and len(xt) >= 6 and not getattr(ax, "_v37_no_rotate", False):
+            for t in xt:
+                t.set_rotation(40)
+                t.set_ha("right")
 
 
 def savefig(fig, name, dpi=300, insert_cm=12.0, transparent=True):
@@ -244,79 +257,93 @@ def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9,
     tb = orientation != "lr"
     box_h, ec, fc = 0.95, "#2F5597", "#EAF2FB"
     label_of = {k: lab for layer in layers for k, lab in layer}
-
-    def box_w(lab):
-        return max(2.4, 0.34 * len(str(lab)) + 1.0)
-
-    if tb:
-        main_step = vgap
-
-        def span(layer):
-            return sum(box_w(l) for _, l in layer) + hgap * max(len(layer) - 1, 0)
-    else:
-        main_step = max(box_w(l) for layer in layers for _, l in layer) + max(hgap, 1.2)
-
-        def span(layer):
-            return len(layer) * (box_h + 0.55) - 0.55
-
-    pos, widths, maxw = {}, {}, 0.0
-    for li, layer in enumerate(layers):
-        total = span(layer)
-        maxw = max(maxw, total)
-        u = -total / 2
-        for key, lab in layer:
-            w = box_w(lab)
-            if tb:
-                pos[key] = (u + w / 2, -li * main_step)
-                u += w + hgap
-            else:
-                pos[key] = (li * main_step, -(u + box_h / 2))
-                u += box_h + 0.55
-            widths[key] = w
-
     nst = len(layers)
+
+    def box_w(lab, k=1.0):
+        # V3.9：盒宽随字号系数 k 同步放大，保证放大后的文字始终装得下
+        return max(2.4 * k, 0.34 * k * len(str(lab)) + 1.0)
+
+    def layout(k=1.0):
+        """按字号系数 k 计算节点坐标与图幅（坐标/盒宽/间距全部随 k 缩放）。"""
+        if tb:
+            main_step = vgap * k
+
+            def span(layer):
+                return sum(box_w(l, k) for _, l in layer) + hgap * k * max(len(layer) - 1, 0)
+        else:
+            main_step = max(box_w(l, k) for layer in layers for _, l in layer) + max(hgap, 1.2) * k
+
+            def span(layer):
+                return len(layer) * (box_h + 0.55) * k - 0.55 * k
+        pos, widths, maxw = {}, {}, 0.0
+        for li, layer in enumerate(layers):
+            total = span(layer)
+            maxw = max(maxw, total)
+            u = -total / 2
+            for key, lab in layer:
+                w = box_w(lab, k)
+                if tb:
+                    pos[key] = (u + w / 2, -li * main_step)
+                    u += w + hgap * k
+                else:
+                    pos[key] = (li * main_step, -(u + box_h * k / 2))
+                    u += (box_h + 0.55) * k
+                widths[key] = w
+        if tb:
+            figw = min(max(7.5, maxw * 0.95 + (2.4 * k if phases else 0)), 16 * k)
+            figh = max(2.2, nst * main_step * 0.62 + 0.3)
+        else:
+            figw = min(max(7.5, nst * main_step * 1.0), 16 * k)
+            figh = max(2.2, maxw * 0.9 + 0.3 + (0.9 * k if phases else 0))
+        return pos, widths, maxw, main_step, figw, figh
+
+    # V3.9 自缩放：先按基准 10pt 布局估算图宽，推出放大系数 factor
+    # （与 _boost_fonts 同公式、同 1.5 封顶），再按放大字号重新布局——
+    # 布局一开始就为终稿字号设计，杜绝"先布局后放大字形"导致的重叠。
+    _, _, _, _, figw0, _ = layout(1.0)
+    factor = min(max(figw0 * 2.54 / max(insert_cm, 1e-6), 1.0), 1.5)
+    pos, widths, maxw, main_step, figw, figh = layout(factor)
+    fs = 10.0 * factor
+    k = factor
+
     if title:
         # V3.7：title 参数已废弃（图题改走 md 题注行），不再渲染也不占版面
         print(f"[V3.7] flow(): title={title!r} 已忽略 —— 请在 md 中补 '图 N: {title}' 题注行")
         title = None
-    if tb:
-        figw = min(max(7.5, maxw * 0.95 + (2.4 if phases else 0)), 16)
-        figh = max(2.2, nst * main_step * 0.62 + 0.3)
-    else:
-        figw = min(max(7.5, nst * main_step * 1.0), 16)
-        figh = max(2.2, maxw * 0.9 + 0.3 + (0.9 if phases else 0))
     fig, ax = plt.subplots(figsize=(figw, figh))
+    fig._v37_no_boost = True  # 已按 factor 自缩放，_boost_fonts 不得二次放大
     for key, (cx, cy) in pos.items():
         w = widths[key]
         ax.add_patch(mpatches.FancyBboxPatch(
-            (cx - w / 2, cy - box_h / 2), w, box_h,
-            boxstyle="round,pad=0.08", fc=fc, ec=ec, lw=1.2))
-        ax.text(cx, cy, label_of[key], ha="center", va="center", fontsize=10)
+            (cx - w / 2, cy - box_h * k / 2), w, box_h * k,
+            boxstyle=f"round,pad={0.08 * k}", fc=fc, ec=ec, lw=1.2))
+        ax.text(cx, cy, label_of[key], ha="center", va="center", fontsize=fs)
     for e in edges:
         src, dst = e[0], e[1]
         x1, y1 = pos[src]; x2, y2 = pos[dst]
         ax.add_patch(mpatches.FancyArrowPatch(
-            (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=14,
-            color=ec, lw=1.1, shrinkA=26, shrinkB=26))
+            (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=14 * k,
+            color=ec, lw=1.1, shrinkA=26 * k, shrinkB=26 * k))
         if len(e) == 3:
-            ax.text((x1 + x2) / 2 + 0.15, (y1 + y2) / 2, str(e[2]), fontsize=8, color=ec)
+            ax.text((x1 + x2) / 2 + 0.15 * k, (y1 + y2) / 2, str(e[2]),
+                    fontsize=8 * k, color=ec)
     if phases:
         for li, ph in enumerate(phases):
             if ph is None:
                 continue
             if tb:
-                ax.text(-maxw / 2 - 1.2, -li * main_step, str(ph), ha="right",
-                        va="center", fontsize=9, fontweight="bold", color=ec)
+                ax.text(-maxw / 2 - 1.2 * k, -li * main_step, str(ph), ha="right",
+                        va="center", fontsize=9 * k, fontweight="bold", color=ec)
             else:
-                ax.text(li * main_step, maxw / 2 + 1.0, str(ph), ha="center",
-                        fontsize=9, fontweight="bold", color=ec)
+                ax.text(li * main_step, maxw / 2 + 1.0 * k, str(ph), ha="center",
+                        fontsize=9 * k, fontweight="bold", color=ec)
     if tb:
-        ax.set_xlim(-maxw / 2 - (2.8 if phases else 1), maxw / 2 + 1)
+        ax.set_xlim(-maxw / 2 - (2.8 * k if phases else 1.0 * k), maxw / 2 + 1.0 * k)
         ax.set_ylim(-nst * main_step, main_step * 0.4)
     else:
-        half = max(widths.values()) / 2 + 0.8
+        half = max(widths.values()) / 2 + 0.8 * k
         ax.set_xlim(-half, (nst - 1) * main_step + half)
-        ax.set_ylim(-maxw / 2 - 1, maxw / 2 + (2.0 if phases else 1))
+        ax.set_ylim(-maxw / 2 - 1.0 * k, maxw / 2 + (2.0 * k if phases else 1.0 * k))
     ax.axis("off")
     return savefig(fig, name, insert_cm=insert_cm)
 '''

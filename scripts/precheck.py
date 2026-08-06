@@ -241,6 +241,42 @@ def check(path: Path, lang: str, problem_dir: Path = None):
                 if sym and not re.search(re.escape(sym[:1]), rest):
                     warns.append(f"symbol {cells[0]} defined but unused in body")
 
+    # --- pseudo-math typography (V3.9) ---------------------------------------
+    # 散文中的伪数学必须写成行内 LaTeX：p_FDR→$p_{\mathrm{FDR}}$、
+    # χ²→$\chi^2$、裸 p=0.01→$p=0.01$。逐行检查，跳过代码块与 $$ 行，
+    # 先剥离行内 $...$ 区间再匹配。
+    PSEUDO_SUB_RE = re.compile(r"[A-Za-z]_[A-Za-z0-9一-鿿]+")
+    UNICODE_MATH_RE = re.compile(r"[χΣ∑∏√≤≥≠∈]")
+    BARE_STAT_RE = re.compile(r"(?<![$\w.])[pVFr]=\d")
+    pm_sub, pm_uni, pm_bare = [], [], []
+    in_code = False
+    for li, line in enumerate(text.splitlines()):
+        ls = line.strip()
+        if ls.startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code or ls.startswith("$$"):
+            continue
+        plain = re.sub(r"\$[^$]+\$", "", line)  # 剥掉合法行内公式
+        plain = IMG_MD_RE.sub("", plain)        # 图片路径（fig1_xxx.png）不算
+        plain = re.sub(r"`[^`]+`", "", plain)   # 行内代码（文件名/变量）不算
+        plain = re.sub(r"\S+\.(?:py|csv|png|jpg|xlsx|md|tex)\b", "", plain)  # 文件路径
+        if PSEUDO_SUB_RE.search(plain):
+            pm_sub.append(li + 1)
+        if UNICODE_MATH_RE.search(plain):
+            pm_uni.append(li + 1)
+        if BARE_STAT_RE.search(plain):
+            pm_bare.append(li + 1)
+    if pm_sub:
+        warns.append(f"pseudo subscript 'x_y' outside math (lines {pm_sub[:5]}) —— "
+                     f"用 $x_{{y}}$ 行内公式，不要下划线拼写")
+    if pm_uni:
+        warns.append(f"unicode math char (χ/Σ/≤/≥...) outside math (lines {pm_uni[:5]}) —— "
+                     f"用 $\\chi^2$、$\\le$ 等 LaTeX 符号")
+    if pm_bare:
+        warns.append(f"bare statistic 'p=0.01' outside math (lines {pm_bare[:5]}) —— "
+                     f"统计量写 $p=0.01$ 保持字体统一")
+
     # --- plagiarism check (N5) -----------------------------------------------
     pdir = problem_dir or (path.parent.parent / "problem")
     status, ratio = plagiarism_check(text, pdir, lang)

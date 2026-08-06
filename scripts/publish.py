@@ -67,10 +67,18 @@ def main() -> int:
                f"$d=$w.Documents.Open('{docx}',$false,$true);"
                f"$d.SaveAs([ref]'{pdf}',[ref]17);"
                "$d.Close($false);$w.Quit()")
+        docx_mtime = docx.stat().st_mtime
+
+        def pdf_fresh():
+            # V3.9：必须是本次导出的新 PDF——陈旧 PDF 会掩盖 COM 失败
+            return pdf.is_file() and pdf.stat().st_mtime >= docx_mtime - 1
+
         try:
+            if pdf.is_file():
+                pdf.unlink()  # 先删陈旧 PDF，存在性检查才有意义
             r = run([POWERSHELL, "-NoProfile", "-Command", cmd],
                     capture_output=True, text=True, timeout=300)
-            if r.returncode == 0 and pdf.is_file():
+            if r.returncode == 0 and pdf_fresh():
                 print(f"      PDF OK: {pdf}")
             else:
                 err = (r.stderr or r.stdout or "").strip().splitlines()
@@ -78,7 +86,7 @@ def main() -> int:
                 print("      retrying once ...")
                 r = run([POWERSHELL, "-NoProfile", "-Command", cmd],
                         capture_output=True, text=True, timeout=300)
-                if r.returncode == 0 and pdf.is_file():
+                if r.returncode == 0 and pdf_fresh():
                     print(f"      PDF OK (retry): {pdf}")
                 else:
                     print("      PDF skipped. 自查: ① Word 能否手动打开该 docx "

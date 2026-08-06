@@ -75,6 +75,7 @@ BODY_SIZE = 12
 MATH_IMG = Path(__file__).resolve().parent / "_math_tmp"
 MATH_IMG.mkdir(exist_ok=True)
 _math_counter = 0
+_eq_counter = 0  # V3.9：display math 全文顺序编号（含附录）
 
 
 def set_font(run, font, bold=None):
@@ -368,6 +369,8 @@ def append_code_files(doc, code_dir):
 
 
 def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
+    global _eq_counter
+    _eq_counter = 0
     doc = Document(str(template))
     clear_body(doc)
     fix_h1_numbering(doc)
@@ -418,24 +421,26 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
                 buf += lines[i].strip()
             latex, tag = preprocess_latex(buf[:-2])
             omml = latex_to_omml(latex)
+            # V3.9：所有 display math 自动编号（\tag{} 可手动覆盖），
+            # 公式单行居中、编号右对齐贴页边（(1) (2) ... 全文连续）
+            _eq_counter += 1
+            if not tag:
+                tag = str(_eq_counter)
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            if tag:  # 编号贴右页边
-                from docx.enum.text import WD_TAB_ALIGNMENT
-                p.paragraph_format.tab_stops.add_tab_stop(Cm(15.6), WD_TAB_ALIGNMENT.RIGHT)
+            from docx.enum.text import WD_TAB_ALIGNMENT
+            p.paragraph_format.tab_stops.add_tab_stop(Cm(15.6), WD_TAB_ALIGNMENT.RIGHT)
             if omml is not None:
                 opara = etree.SubElement(p._p, f"{{{M_NS}}}oMathPara")
                 opara.append(omml)
-                if tag:
-                    p.add_run("\t（" + tag + "）")
+                p.add_run("\t（" + tag + "）")
                 i += 1; continue
-            img, w, h, tag = math_png(buf[:-2], fontsize=13)
+            img, w, h, _ = math_png(buf[:-2], fontsize=13)  # tag 已自取，不覆盖
             run = p.add_run()
             max_w_cm, nat_w_cm = 14.0, w / 300 * 2.54
             scale = min(1.0, max_w_cm / max(nat_w_cm, 0.1))
             run.add_picture(img, width=Cm(nat_w_cm * scale), height=Cm(h / 300 * 2.54 * scale))
-            if tag:
-                p.add_run("\t（" + tag + "）")
+            p.add_run("\t（" + tag + "）")
             i += 1; continue
         if line.strip().startswith("```"):  # fenced code block
             i += 1
@@ -464,14 +469,18 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
             i += 1; continue
         if line.strip().startswith("|"):
             rows = []
-            while i < len(lines) and lines[i].strip().startswith("|"):
-                cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+            j = i
+            while j < len(lines) and lines[j].strip().startswith("|"):
+                cells = [c.strip() for c in lines[j].strip().strip("|").split("|")]
                 if not all(re.fullmatch(r":?-{2,}:?", c or "---") for c in cells):
                     rows.append(cells)
-                i += 1
-            if rows:
+                j += 1
+            # V3.9：真表格至少有表头+分隔行两行；单行 |..| 按正文处理
+            # （如 |ρ| 绝对值写法，避免被吞成一行两列的畸形表）
+            if rows and j - i >= 2:
                 add_table(doc, rows)
-            continue
+                i = j
+                continue
         if CAPTION_RE.match(line.strip()):
             cap = re.sub(r"^(图|表)(\s*\d+)\s*[：:]\s*", r"\1\2: ", line.strip())  # 半角冒号
             try:
@@ -481,8 +490,15 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             add_runs(p, cap, base_size=10.5)
             if cap.startswith("表"):
+                # V3.9 题注间距：表题在表上方，段前 6pt 与正文隔开、段后 3pt 贴表
+                p.paragraph_format.space_before = Pt(6)
+                p.paragraph_format.space_after = Pt(3)
                 # 表题与表体绑定：题注随表一起另起一页，不留在上一页页尾
                 p.paragraph_format.keep_with_next = True
+            else:
+                # V3.9 题注间距：图题在图下方，段前 3pt 贴图、段后 6pt 与正文隔开
+                p.paragraph_format.space_before = Pt(3)
+                p.paragraph_format.space_after = Pt(6)
             i += 1; continue
         m = re.match(r"^(\s*)([-*]|\d+\.)\s+(.*)$", line)
         if m:
