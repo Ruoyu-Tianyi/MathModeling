@@ -42,8 +42,16 @@ def main() -> int:
 
     print("[2/4] build docx ...")
     build_cmd = [sys.executable, str(SKILL_DIR / "build_docx.py"), str(md)]
-    if args.appendix_code:
-        build_cmd += ["--appendix-code", args.appendix_code]
+    appendix_code = args.appendix_code
+    if not appendix_code:
+        # V3.7.2：未指定时自动探测项目 code/ 目录（<paper>/../code），
+        # 附录嵌代码是国赛硬性期望，默认带上
+        cand = md.parent.parent / "code"
+        if cand.is_dir() and list(cand.glob("*.py")):
+            appendix_code = str(cand)
+            print(f"  appendix-code auto-detected: {cand}")
+    if appendix_code:
+        build_cmd += ["--appendix-code", appendix_code]
     r = run(build_cmd)
     if r.returncode != 0:
         print("ABORT: docx build failed")
