@@ -146,6 +146,118 @@ def _boost_fonts(fig, insert_cm, target_pt=10.0):
                 t.set_ha("right")
 
 
+def _content_boxes(ax, renderer):
+    """收集轴内数据内容的 display 坐标包围盒（线/集合/补丁/文本），
+    供图例防重叠避让使用。"""
+    boxes = []
+    for ln in ax.lines:
+        xy = ln.get_xydata()
+        if len(xy) == 0:
+            continue
+        disp = ax.transData.transform(xy)
+        boxes.append((disp[:, 0].min(), disp[:, 1].min(),
+                      disp[:, 0].max(), disp[:, 1].max()))
+    for coll in ax.collections:
+        try:
+            for p in coll.get_paths():
+                bb = p.get_extents(coll.get_transform())
+                boxes.append((bb.x0, bb.y0, bb.x1, bb.y1))
+        except Exception:
+            pass
+    for p in ax.patches:
+        bb = p.get_window_extent(renderer)
+        boxes.append((bb.x0, bb.y0, bb.x1, bb.y1))
+    for t in ax.texts:
+        if not t.get_text():
+            continue
+        bb = t.get_window_extent(renderer)
+        boxes.append((bb.x0, bb.y0, bb.x1, bb.y1))
+    return boxes
+
+
+def _legend_safe(fig, name):
+    """V4.1 图例防重叠：图例与轴内内容（曲线/柱/散点/标注）相交时，
+    按候选位置重定位；图内无空位则移到轴外右侧。
+    多面板图各子图图例文本完全一致时，合并为顶部共享图例（论文惯例，
+    避免满幅面板被迫移轴外后压到相邻子图）。"""
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+    except Exception:
+        return
+    legs = [(ax, ax.get_legend()) for ax in fig.axes
+            if ax.get_legend() is not None and ax.get_legend().get_visible()]
+    if len(legs) > 1:
+        keys = [tuple(t.get_text() for t in leg.get_texts()) for _, leg in legs]
+        if len(set(keys)) == 1 and keys[0]:
+            handles, labels = legs[0][0].get_legend_handles_labels()
+            for _, leg in legs:
+                leg.remove()
+            fig.legend(handles, labels, loc="upper center",
+                       ncol=min(len(labels), 6), frameon=False,
+                       bbox_to_anchor=(0.5, 1.04))
+            print(f"[V4.1] {name}: 多面板重复图例 —— 已合并为顶部共享图例")
+            return
+    for ax in fig.axes:
+        leg = ax.get_legend()
+        if leg is None or not leg.get_visible():
+            continue
+        boxes = _content_boxes(ax, renderer)
+        if not boxes:
+            continue
+
+        def hit(lbb):
+            for b in boxes:
+                if not (lbb.x1 < b[0] or lbb.x0 > b[2]
+                        or lbb.y1 < b[1] or lbb.y0 > b[3]):
+                    return True
+            return False
+
+        if not hit(leg.get_window_extent(renderer)):
+            continue
+        for loc in ["upper left", "lower left", "lower right", "upper right",
+                    "center left", "center right", "lower center",
+                    "upper center", "center"]:
+            leg.set_loc(loc)
+            fig.canvas.draw()
+            if not hit(leg.get_window_extent(renderer)):
+                print(f"[V4.1] {name}: 图例与内容重叠 —— 已自动重定位到 {loc}")
+                break
+        else:
+            leg.set_bbox_to_anchor((1.02, 1.0))
+            leg.set_loc("upper left")
+            print(f"[V4.1] {name}: 图内无空位 —— 图例已移到轴外右侧")
+
+
+_SUBSCRIPT_RE = None
+
+
+def _lint_texts(fig, name):
+    """V4.1 伪下标 lint：图内文字（非 mathtext）出现 x_i / n_无风化 一类
+    下划线伪下标时 WARN——要么用 mathtext $n_{...}$，要么改写纯文字。"""
+    global _SUBSCRIPT_RE
+    if _SUBSCRIPT_RE is None:
+        import re
+        _SUBSCRIPT_RE = re.compile(r"[A-Za-z]{1,4}_[A-Za-z0-9一-鿿{]")
+    bad = set()
+    for ax in fig.axes:
+        ss = [ax.get_xlabel(), ax.get_ylabel(), ax.get_title()]
+        ss += [t.get_text() for t in ax.texts]
+        ss += [t.get_text() for t in ax.get_xticklabels()]
+        ss += [t.get_text() for t in ax.get_yticklabels()]
+        leg = ax.get_legend()
+        if leg is not None:
+            ss += [t.get_text() for t in leg.get_texts()]
+        for s in ss:
+            if not s or "$" in s:
+                continue
+            for m in _SUBSCRIPT_RE.finditer(s):
+                bad.add(m.group(0))
+    if bad:
+        print(f"[V4.1] {name}: 图内疑似伪下标 {sorted(bad)} —— "
+              f"下标用 mathtext（$n_{{...}}$）或改写纯文字（如 未风化 n=12）")
+
+
 def savefig(fig, name, dpi=300, insert_cm=12.0, transparent=True):
     """保存论文用图。
 
@@ -155,6 +267,8 @@ def savefig(fig, name, dpi=300, insert_cm=12.0, transparent=True):
     """
     _strip_titles(fig, name)
     _boost_fonts(fig, insert_cm)
+    _legend_safe(fig, name)
+    _lint_texts(fig, name)
     if transparent:
         fig.patch.set_alpha(0.0)
         for ax in fig.axes:
@@ -321,9 +435,26 @@ def flow(layers, edges, name, title=None, vgap=2.0, hgap=0.9,
     for e in edges:
         src, dst = e[0], e[1]
         x1, y1 = pos[src]; x2, y2 = pos[dst]
+        # V4.1：箭头起止点裁剪到盒边界，替代固定 shrinkA/B（points 收缩
+        # 与数据坐标盒尺寸不匹配，斜向边必戳进方框）。沿边方向求与盒
+        # 矩形（含 round-pad）的交点，两端各留 0.10k 视觉间隙。
+        dx, dy = x2 - x1, y2 - y1
+        dist = max((dx * dx + dy * dy) ** 0.5, 1e-9)
+        ux, uy = dx / dist, dy / dist
+
+        def _edge_pt(key, sx, sy, vx, vy):
+            hw = widths[key] / 2 + 0.18 * k  # 半宽 + pad + 间隙
+            hh = box_h * k / 2 + 0.18 * k
+            txx = hw / abs(vx) if abs(vx) > 1e-9 else float("inf")
+            tyy = hh / abs(vy) if abs(vy) > 1e-9 else float("inf")
+            t = min(txx, tyy)
+            return sx + vx * t, sy + vy * t
+
+        xa, ya = _edge_pt(src, x1, y1, ux, uy)
+        xb, yb = _edge_pt(dst, x2, y2, -ux, -uy)
         ax.add_patch(mpatches.FancyArrowPatch(
-            (x1, y1), (x2, y2), arrowstyle="-|>", mutation_scale=14 * k,
-            color=ec, lw=1.1, shrinkA=26 * k, shrinkB=26 * k))
+            (xa, ya), (xb, yb), arrowstyle="-|>", mutation_scale=14 * k,
+            color=ec, lw=1.1, shrinkA=0, shrinkB=0))
         if len(e) == 3:
             ax.text((x1 + x2) / 2 + 0.15 * k, (y1 + y2) / 2, str(e[2]),
                     fontsize=8 * k, color=ec)
