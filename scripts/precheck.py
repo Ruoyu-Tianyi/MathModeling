@@ -179,6 +179,47 @@ def check(path: Path, lang: str, problem_dir: Path = None):
     if "附录" in text and "```" not in text:
         warns.append("appendix has no code block (consider --appendix-code)")
 
+    # --- thickness checks (V3.8，对照 deep-reasoning.md R6 深度档位自检) ------
+    body = text.split("## 参考文献")[0]
+    n_fig_body = len(IMG_MD_RE.findall(body))
+    n_tab_body = len({m.group(1) for m in TAB_CAPTION_RE.finditer(body)})
+    prose = re.sub(r"\$\$.+?\$\$", "M", body, flags=re.S)
+    prose = re.sub(r"[!|`*#_\s\[\](){}<>:：;；,，.。/\\\-=$~^]", "", prose)
+    page_est = len(prose) / 800 + 0.4 * n_fig_body + 0.35 * n_tab_body
+    if page_est < 12:
+        warns.append(f"thin body: ~{page_est:.0f} pages estimated "
+                     f"(prose+figures+tables, expect >=12 for 获奖论文形态) —— "
+                     f"按 R6 深度档位自检补分析增量，不要段落注水")
+    n_eq_total = len(re.findall(r"\$\$.+?\$\$", body, re.S))
+    if n_eq_total < 8:
+        warns.append(f"low total display-math count ({n_eq_total}, expect >=8) —— "
+                     f"推导链偏短，对照深化阶梯升级至少一个模型")
+    # figure type diversity (heuristic on caption keywords)
+    FIG_TYPES = {"流程/框架": r"流程|路线|链路|框架", "热力": r"热力",
+                 "柱状/条形": r"柱状|条形|对比|MAE|区分度|重要性",
+                 "折线/曲线": r"折线|曲线|趋势|扰动", "散点": r"散点|落点",
+                 "雷达/画像": r"雷达|画像", "箱线": r"箱线", "饼图": r"饼"}
+    caps = re.findall(r"(?m)^图\s*\d+[:：]\s*(.+)$", body)
+    if n_fig_body >= 5:
+        hit = {name for name, pat in FIG_TYPES.items()
+               if any(re.search(pat, c) for c in caps)}
+        if len(hit) <= 2:
+            warns.append(f"low figure-type diversity {sorted(hit)} —— "
+                         f"可视化方式要多样（散点/箱线/雷达/误差棒/扰动曲线等）")
+    # model-section five-part completeness: each 问题 H3 needs 建立 + 求解/结果
+    build_sec = re.search(r"##\s*模型的建立与求解\s*\n(.*?)(?=\n##\s|\Z)",
+                          text, re.S)
+    if build_sec:
+        h3s = list(re.finditer(r"(?m)^###\s+(问题.+)$", build_sec.group(1)))
+        for k, h in enumerate(h3s):
+            seg = build_sec.group(1)[h.end():h3s[k + 1].start()
+                                     if k + 1 < len(h3s) else None]
+            has_build = re.search(r"(?m)^####\s+.*(建立|模型)", seg)
+            has_solve = re.search(r"(?m)^####\s+.*(求解|结果)", seg)
+            if not (has_build and has_solve):
+                warns.append(f"model section incomplete: {h.group(1)[:24]} "
+                             f"(五段式：建立→求解→结果→检验→小结)")
+
     # --- rigor checks (deep-reasoning.md, R5) --------------------------------
     # 4) assumptions count + each assumption should be referenced later
     am = re.search(r"模型假设\s*\n+(.*?)(?=\n##|\Z)", text, re.S)
