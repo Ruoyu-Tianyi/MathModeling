@@ -427,15 +427,20 @@ def build(md_path: Path, out_path: Path, template: Path, appendix_code=None):
             if not tag:
                 tag = str(_eq_counter)
             p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            # V4.2：公式居中 + 编号右对齐的标准制表位方案——段落左对齐，
+            # 行首 tab 推到居中制表位（版心中点 7.8cm），公式中心对准版心
+            # 中心；第二个 tab 把编号推到右制表位（版心右缘 15.6cm）。
+            # V3.9 的段落 CENTER 会把"公式+tab+编号"作为整体居中，公式偏左。
             from docx.enum.text import WD_TAB_ALIGNMENT
+            p.paragraph_format.tab_stops.add_tab_stop(Cm(7.8), WD_TAB_ALIGNMENT.CENTER)
             p.paragraph_format.tab_stops.add_tab_stop(Cm(15.6), WD_TAB_ALIGNMENT.RIGHT)
             if omml is not None:
-                opara = etree.SubElement(p._p, f"{{{M_NS}}}oMathPara")
-                opara.append(omml)
+                p.add_run("\t")
+                p._p.append(omml)  # inline oMath，跟随制表位布局
                 p.add_run("\t（" + tag + "）")
                 i += 1; continue
             img, w, h, _ = math_png(buf[:-2], fontsize=13)  # tag 已自取，不覆盖
+            p.add_run("\t")
             run = p.add_run()
             max_w_cm, nat_w_cm = 14.0, w / 300 * 2.54
             scale = min(1.0, max_w_cm / max(nat_w_cm, 0.1))
